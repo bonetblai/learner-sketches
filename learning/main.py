@@ -31,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--additional_booleans", nargs='*', default=None, help="Additional boolean features to include.")
     parser.add_argument("--additional_numericals", nargs='*', default=None, help="Additional numerical features to include.")
     parser.add_argument("--enable_dump_files", action='store_true', default=False, help="Whether data should be written to files.")
+    parser.add_argument("--ppltl-goal", type=str, default='', help="Pure-past LTL goal.")
 
     args = parser.parse_args()
 
@@ -54,4 +55,5 @@ if __name__ == "__main__":
                                    args.feature_limit,
                                    args.additional_booleans,
                                    args.additional_numericals,
-                                   args.enable_dump_files)
+                                   args.enable_dump_files,
+                                   args.ppltl_goal)

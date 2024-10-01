@@ -47,6 +47,7 @@ def learn_sketch_for_problem_class(
     additional_booleans: List[str] = None,
     additional_numericals: List[str] = None,
     enable_dump_files: bool = False,
+    ppltl_goal_str: str = "",
 ):
     # Setup arguments and workspace
     if additional_booleans is None:
@@ -63,6 +64,17 @@ def learn_sketch_for_problem_class(
     preprocessing_timer = Timer()
     asp_timer = Timer(stopped=True)
     verification_timer = Timer(stopped=True)
+
+    # Generate DFA from PPLTL spec (if any)
+    ppltl_dfa = None
+    if ppltl_goal_str:
+        from ltlf2dfa.parser.ltlf import LTLfParser
+        from ltlf2dfa.parser.ppltl import PPLTLParser
+        ppltl_parser = PPLTLParser()
+        ppltl_formula = ppltl_parser(ppltl_goal_str)
+        print(f"PPLTL: goal='{ppltl_formula}'")
+        ppltl_dfa = ppltl_formula.to_dfa()
+        print(ppltl_dfa)
 
     # Generate data
     with change_dir("input"):
