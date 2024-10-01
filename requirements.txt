@@ -1,8 +1,8 @@
-pymimir==0.9.62
-lab==8.1
-pynauty==2.8.6
-graphviz==0.20.1
-dlplan==0.3.23
+pymimir>=0.9.62
+lab>=8.1
+pynauty>=2.8.6
+graphviz>=0.20.1
+dlplan>=0.3.23
 clingo
 jsonpickle
 termcolor
