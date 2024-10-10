@@ -3,12 +3,12 @@ import re
 from abc import ABC, abstractmethod
 
 import dlplan.core as dlplan_core
+import dlplan.policy as dlplan_policy
 
 from clingo import Symbol
-from typing import List, Union, MutableSet
+from typing import Set, List, Union, MutableSet
 
 from .iteration_data import IterationData
-
 from ..preprocessing import PreprocessingData
 
 
@@ -103,6 +103,7 @@ class D2sepDlplanPolicyFactory(DlplanPolicyFactory):
                 dlplan_features.add(iteration_data.feature_pool[f_idx].dlplan_feature)
         rules = set()
         for symbol in symbols:
+            #_print_symbol(symbol)
             if symbol.name == "good":
                 r_idx = symbol.arguments[0].number
                 rule = iteration_data.state_pair_equivalences[r_idx]
@@ -120,3 +121,24 @@ class D2sepDlplanPolicyFactory(DlplanPolicyFactory):
                         effects.add(effect)
                 rules.add(policy_builder.make_rule(conditions, effects))
         return policy_builder.make_policy(rules)
+
+
+def _print_symbol(symbol):
+    if symbol.name == "s_distance":
+        print(f'ASP: Symbol: s_distance({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
+        pass
+    elif symbol.name == "feature_condition":
+        print(f'ASP: Symbol: feature_condition({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
+        pass
+    elif symbol.name == "feature_effect":
+        print(f'ASP: Symbol: feature_effect({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
+        pass
+    elif symbol.name == "d2_separate":
+        print(f'ASP: Symbol: d2_separate({symbol.arguments[0].number},{symbol.arguments[1].number})')
+        pass
+    elif symbol.name == "cover":
+        print(f'ASP: Symbol: cover({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
+        pass
+    elif symbol.name == "initial":
+        print(f'ASP: Symbol: initial({symbol.arguments[0].number})')
+        pass
