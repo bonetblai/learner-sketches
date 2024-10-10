@@ -17,7 +17,7 @@ if __name__ == "__main__":
     parser.add_argument("--disable_closed_Q", action='store_true', default=False, help="Whether the search space is closed. Default is True.")
     parser.add_argument("--max_num_states_per_instance", type=int, default=10000, help="The maximum number of states per instance.")
     parser.add_argument("--max_time_per_instance", type=int, default=10000, help="The maximum time (in seconds) per instance.")
-    parser.add_argument("--encoding_type", type=EncodingType, default=EncodingType.D2, choices=[EncodingType.D2, EncodingType.EXPLICIT], help="The encoding type for the sketch learner.")
+    parser.add_argument("--encoding_type", type=EncodingType, default=EncodingType.D2, choices=[EncodingType.D2, EncodingType.EXPLICIT, EncodingType.D2_LTL], help="The encoding type for the sketch learner.")
     parser.add_argument("--max_num_rules", type=int, default=4, help="The maximum number of rules used in the explicit encoding.")
     parser.add_argument("--enable_goal_separating_features", action='store_true', default=False, help="Whether to enable goal separating features. Default is True.")
     parser.add_argument("--disable_feature_generation", action='store_true', default=False, help="Whether to enable feature generation. Default is False.")
