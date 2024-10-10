@@ -8,9 +8,10 @@ import pymimir as mm
 from dlplan.policy import PolicyMinimizer
 
 from .src.exit_codes import ExitCode
-from .src.iteration import EncodingType, ASPFactory, ClingoExitCode, IterationData, LearningStatistics, Sketch, D2sepDlplanPolicyFactory, ExplicitDlplanPolicyFactory, compute_feature_pool, compute_per_state_feature_valuations, compute_state_pair_equivalences, compute_tuple_graph_equivalences, minimize_tuple_graph_equivalences
+from .src.iteration import EncodingType, ASPFactory, ClingoExitCode, IterationData, LearningStatistics, Sketch, LTLSketch, D2sepDlplanPolicyFactory, LTLD2sepDlplanPolicyFactory, ExplicitDlplanPolicyFactory, compute_feature_pool, compute_per_state_feature_valuations, compute_state_pair_equivalences, compute_tuple_graph_equivalences, minimize_tuple_graph_equivalences
 from .src.util import Timer, create_experiment_workspace, change_working_directory, write_file, change_dir, memory_usage, add_console_handler, print_separation_line
 from .src.preprocessing import InstanceData, PreprocessingData, StateFinder, compute_instance_datas, compute_tuple_graphs
+from .src.iteration import make_dfa
 
 
 def compute_smallest_unsolved_instance(
@@ -68,30 +69,30 @@ def learn_sketch_for_problem_class(
     # Generate DFA from PPLTL spec (if any)
     ppltl_dfa = None
     if ppltl_goal_str:
-        from ltlf2dfa.parser.ltlf import LTLfParser
-        from ltlf2dfa.parser.ppltl import PPLTLParser
-        ppltl_parser = PPLTLParser()
-        ppltl_formula = ppltl_parser(ppltl_goal_str)
-        print(f"PPLTL: goal='{ppltl_formula}'")
-        ppltl_dfa = ppltl_formula.to_dfa()
-        print(ppltl_dfa)
+        ppltl_dfa = make_dfa(ppltl_goal_str)
+        #print(ppltl_dfa)
+        logging.info(f'dfa: transitions: {[(q1, q2, str(label)) for (q1, q2, label) in ppltl_dfa.transitions]}')
+        logging.info(f'dfa: initial: {ppltl_dfa.initial}')
+        logging.info(f'dfa: accepting: {ppltl_dfa.accepting}')
+        logging.info(f'dfa: labels: {[str(label) for label in ppltl_dfa.labels]}')
+        logging.info(f'dfa: alphabet: {ppltl_dfa.alphabet}')
 
     # Generate data
     with change_dir("input"):
-        logging.info(colored("Constructing InstanceDatas...", "blue", "on_grey"))
+        logging.info(colored("Constructing InstanceDatas...", "blue"))
         domain_data, instance_datas, num_ss_states, num_gfa_states = compute_instance_datas(domain_filepath, instance_filepaths, disable_closed_Q, max_num_states_per_instance, max_time_per_instance, enable_dump_files)
-        logging.info(colored("..done", "blue", "on_grey"))
         if instance_datas is None:
             raise Exception("Failed to create InstanceDatas.")
 
         state_finder = StateFinder(domain_data, instance_datas)
 
-        logging.info(colored("Initializing TupleGraphs...", "blue", "on_grey"))
+        logging.info(colored("Initializing TupleGraphs...", "blue"))
         gfa_state_id_to_tuple_graph: Dict[int, mm.TupleGraph] = compute_tuple_graphs(domain_data, instance_datas, state_finder, width, enable_dump_files)
-        logging.info(colored("..done", "blue", "on_grey"))
 
     preprocessing_data = PreprocessingData(domain_data, instance_datas, state_finder, gfa_state_id_to_tuple_graph)
     preprocessing_timer.stop()
+
+    logging.info(f'Training: instances={[instance_data.mimir_ss.get_problem().get_filepath() for instance_data in instance_datas]}')
 
     # Learn sketch
     iteration_data = IterationData()
@@ -101,7 +102,7 @@ def learn_sketch_for_problem_class(
             selected_instance_idxs = [0]
             create_experiment_workspace(workspace)
             while True:
-                logging.info(colored(f"Iteration: {i}", "red", "on_grey"))
+                logging.info(colored(f"Iteration: {i}", "red"))
 
                 preprocessing_timer.resume()
                 iteration_data.instance_datas = [preprocessing_data.instance_datas[subproblem_idx] for subproblem_idx in selected_instance_idxs]
@@ -110,21 +111,16 @@ def learn_sketch_for_problem_class(
                     write_file(f"mimir_ss_{instance_data.idx}.dot", str(instance_data.mimir_ss))
                     write_file(f"mimir_fa_{instance_data.idx}.dot", str(instance_data.gfa.get_abstractions()[instance_data.idx]))
                     write_file(f"mimir_gfa_{instance_data.idx}.dot", str(instance_data.gfa))
-                    print("     ", end="")
-                    print("id:", instance_data.idx,
-                          "problem_filepath:", instance_data.mimir_ss.get_problem().get_filepath(),
-                          "num_states:", instance_data.mimir_ss.get_num_states(),
-                          "num_state_equivalences:", instance_data.gfa.get_num_states())
+                    logging.info(f"    id: {instance_data.idx}, problem_filepath: {instance_data.mimir_ss.get_problem().get_filepath()}, num_states: {instance_data.mimir_ss.get_num_states()}, num_state_equivalences: {instance_data.gfa.get_num_states()}")
 
-                logging.info(colored("Initialize global faithful abstract states...", "blue", "on_grey"))
+                logging.info(colored("Initialize global faithful abstract states...", "blue"))
                 gfa_states : MutableSet[mm.GlobalFaithfulAbstractState] = set()
                 for instance_data in iteration_data.instance_datas:
                     gfa_states.update(instance_data.gfa.get_states())
                 iteration_data.gfa_states = list(gfa_states)
-                logging.info(colored("..done", "blue", "on_grey"))
 
-                logging.info(colored("Initializing DomainFeatureData...", "blue", "on_grey"))
-                iteration_data.feature_pool = compute_feature_pool(
+                logging.info(colored("Initializing DomainFeatureData...", "blue"))
+                iteration_data.feature_pool, iteration_data.additional_features_map = compute_feature_pool(
                     preprocessing_data,
                     iteration_data,
                     gfa_state_id_to_tuple_graph,
@@ -139,86 +135,94 @@ def learn_sketch_for_problem_class(
                     feature_limit,
                     additional_booleans,
                     additional_numericals)
-                logging.info(colored("..done", "blue", "on_grey"))
 
-                logging.info(colored("Constructing PerStateFeatureValuations...", "blue", "on_grey"))
+                logging.info(colored("Constructing PerStateFeatureValuations...", "blue"))
                 iteration_data.gfa_state_global_idx_to_feature_evaluations = compute_per_state_feature_valuations(preprocessing_data, iteration_data)
-                logging.info(colored("..done", "blue", "on_grey"))
 
-                logging.info(colored("Constructing StatePairEquivalenceDatas...", "blue", "on_grey"))
+                logging.info(colored("Constructing StatePairEquivalenceDatas...", "blue"))
                 iteration_data.state_pair_equivalences, iteration_data.gfa_state_global_idx_to_state_pair_equivalence = compute_state_pair_equivalences(preprocessing_data, iteration_data)
-                logging.info(colored("..done", "blue", "on_grey"))
 
-                logging.info(colored("Constructing TupleGraphEquivalences...", "blue", "on_grey"))
+                logging.info(colored("Constructing TupleGraphEquivalences...", "blue"))
                 iteration_data.gfa_state_global_idx_to_tuple_graph_equivalence = compute_tuple_graph_equivalences(preprocessing_data, iteration_data)
-                logging.info(colored("..done", "blue", "on_grey"))
 
-                logging.info(colored("Minimizing TupleGraphEquivalences...", "blue", "on_grey"))
+                logging.info(colored("Minimizing TupleGraphEquivalences...", "blue"))
                 minimize_tuple_graph_equivalences(preprocessing_data, iteration_data)
-                logging.info(colored("..done", "blue", "on_grey"))
                 preprocessing_timer.stop()
 
+                # Set features in LTL automata  (if any)
+                if ppltl_dfa is not None:
+                    ppltl_dfa.set_features(iteration_data.additional_features_map)
+
                 asp_timer.resume()
-                if encoding_type == EncodingType.D2:
+                if encoding_type == EncodingType.D2 or encoding_type == EncodingType.D2_LTL:
                     d2_facts = set()
                     symbols = None
                     j = 0
                     while True:
                         asp_factory = ASPFactory(encoding_type, enable_goal_separating_features, max_num_rules)
-                        facts = asp_factory.make_facts(preprocessing_data, iteration_data)
+                        facts = asp_factory.make_facts(preprocessing_data, iteration_data, ppltl_dfa)
                         if j == 0:
-                            d2_facts.update(asp_factory.make_initial_d2_facts(preprocessing_data, iteration_data))
-                            print("Number of initial D2 facts:", len(d2_facts))
+                            #d2_facts.update(asp_factory.make_initial_d2_facts(preprocessing_data, iteration_data))
+                            d2_facts.update(asp_factory.make_initial_d2_facts_alt(preprocessing_data, iteration_data))
+                            logging.info(f"Number of initial D2 facts: {len(d2_facts)}")
                         elif j > 0:
                             unsatisfied_d2_facts = asp_factory.make_unsatisfied_d2_facts(iteration_data, symbols)
                             d2_facts.update(unsatisfied_d2_facts)
-                            print("Number of unsatisfied D2 facts:", len(unsatisfied_d2_facts))
-                        print("Number of D2 facts:", len(d2_facts), "of", len(iteration_data.state_pair_equivalences) ** 2)
+                            logging.info(f"Number of unsatisfied D2 facts: {len(unsatisfied_d2_facts)}")
+                            assert len(unsatisfied_d2_facts) > 0
+                        logging.info(f"Number of D2 facts: {len(d2_facts)} of {len(iteration_data.state_pair_equivalences) ** 2}")
                         facts.extend(list(d2_facts))
 
-                        logging.info(colored("Grounding Logic Program...", "blue", "on_grey"))
+                        logging.info(colored("Grounding Logic Program...", "blue"))
                         asp_factory.ground(facts)
-                        logging.info(colored("..done", "blue", "on_grey"))
 
-                        logging.info(colored("Solving Logic Program...", "blue", "on_grey"))
+                        logging.info(colored("Solving Logic Program...", "blue"))
                         symbols, returncode = asp_factory.solve()
-                        logging.info(colored("..done", "blue", "on_grey"))
 
                         if returncode in [ClingoExitCode.UNSATISFIABLE, ClingoExitCode.EXHAUSTED]:
-                            print(colored("ASP is unsatisfiable!", "red", "on_grey"))
-                            print(colored(f"No sketch of width {width} exists that solves all instances!", "red", "on_grey"))
+                            logging.info(colored("ASP is unsatisfiable!", "red"))
+                            logging.info(colored(f"No sketch of width {width} exists that solves all instances!", "red"))
                             exit(ExitCode.UNSOLVABLE)
                         elif returncode == ClingoExitCode.UNKNOWN:
-                            print(colored("ASP solving throws unknown error!", "red", "on_grey"))
+                            logging.info(colored("ASP solving throws unknown error!", "red"))
                             exit(ExitCode.UNKNOWN)
                         elif returncode == ClingoExitCode.INTERRUPTED:
-                            print(colored("ASP solving iterrupted!", "red", "on_grey"))
+                            logging.info(colored("ASP solving iterrupted!", "red"))
                             exit(ExitCode.INTERRUPTED)
 
                         asp_factory.print_statistics()
-                        dlplan_policy = D2sepDlplanPolicyFactory().make_dlplan_policy_from_answer_set(symbols, preprocessing_data, iteration_data)
-                        sketch = Sketch(dlplan_policy, width)
-                        logging.info("Learned the following sketch:")
-                        sketch.print()
-                        if compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
-                            # Stop adding D2-separation constraints
-                            # if sketch solves all training instances
-                            break
+
+                        if encoding_type == EncodingType.D2:
+                            dlplan_policy = D2sepDlplanPolicyFactory().make_dlplan_policy_from_answer_set(symbols, preprocessing_data, iteration_data)
+                            sketch = Sketch(dlplan_policy, width)
+                            logging.info("Learned the following sketch:")
+                            sketch.print()
+                            if compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
+                                # Stop adding D2-separation constraints
+                                # if sketch solves all training instances
+                                break
+                        else:
+                            dlplan_policy = LTLD2sepDlplanPolicyFactory().make_dlplan_policy_from_answer_set(symbols, preprocessing_data, iteration_data)
+                            sketch = LTLSketch(dlplan_policy, width, ppltl_dfa)
+                            logging.info("Learned the following sketch:")
+                            sketch.print()
+                            if compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
+                                # Stop adding D2-separation constraints
+                                # if sketch solves all training instances
+                                break
                         j += 1
                 elif encoding_type == EncodingType.EXPLICIT:
                     asp_factory = ASPFactory(encoding_type, enable_goal_separating_features, max_num_rules)
                     facts = asp_factory.make_facts(preprocessing_data, iteration_data)
 
-                    logging.info(colored("Grounding Logic Program...", "blue", "on_grey"))
+                    logging.info(colored("Grounding Logic Program...", "blue"))
                     asp_factory.ground(facts)
-                    logging.info(colored("..done", "blue", "on_grey"))
 
-                    logging.info(colored("Solving Logic Program...", "blue", "on_grey"))
+                    logging.info(colored("Solving Logic Program...", "blue"))
                     symbols, returncode = asp_factory.solve()
-                    logging.info(colored("..done", "blue", "on_grey"))
 
                     if returncode == ClingoExitCode.UNSATISFIABLE:
-                        print("UNSAT")
+                        logging.info("UNSAT")
                         return None, None, None
                     asp_factory.print_statistics()
 
@@ -232,22 +236,21 @@ def learn_sketch_for_problem_class(
                 asp_timer.stop()
 
                 verification_timer.resume()
-                logging.info(colored("Verifying learned sketch...", "blue", "on_grey"))
+                logging.info(colored("Verifying learned sketch...", "blue"))
                 assert compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None
                 smallest_unsolved_instance = compute_smallest_unsolved_instance(preprocessing_data, iteration_data, instance_datas, sketch, enable_goal_separating_features)
-                logging.info(colored("..done", "blue", "on_grey"))
                 verification_timer.stop()
 
                 if smallest_unsolved_instance is None:
-                    print(colored("Sketch solves all instances!", "red", "on_grey"))
+                    logging.info(colored("Sketch solves all instances!", "red"))
                     break
                 else:
                     if smallest_unsolved_instance.idx > max(selected_instance_idxs):
                         selected_instance_idxs = [smallest_unsolved_instance.idx]
                     else:
                         selected_instance_idxs.append(smallest_unsolved_instance.idx)
-                    print("Smallest unsolved instance:", smallest_unsolved_instance.idx)
-                    print("Selected instances:", selected_instance_idxs)
+                    logging.info(f"Smallest unsolved instance: {smallest_unsolved_instance.mimir_ss.get_problem().get_filepath()} (idx={smallest_unsolved_instance.idx})")
+                    logging.info(f"Selected instances {selected_instance_idxs}")
                 i += 1
 
     total_timer.stop()
@@ -255,7 +258,7 @@ def learn_sketch_for_problem_class(
     # Output the result
     with change_dir("output"):
         print_separation_line()
-        logging.info(colored("Summary:", "green", "on_grey"))
+        logging.info(colored("Summary:", "green"))
 
         learning_statistics = LearningStatistics(
             num_training_instances=len(instance_datas),
@@ -266,30 +269,27 @@ def learn_sketch_for_problem_class(
         learning_statistics.print()
         print_separation_line()
 
-        print("Resulting sketch:")
+        logging.info("Resulting sketch:")
         sketch.print()
         print_separation_line()
 
-        print("Resulting minimized sketch:")
-        sketch_minimized = Sketch(PolicyMinimizer().minimize(sketch.dlplan_policy, domain_data.policy_builder), sketch.width)
+        logging.info("Resulting minimized sketch:")
+        sketch_minimized = sketch.minimize(domain_data.policy_builder)
         sketch_minimized.print()
         print_separation_line()
 
         create_experiment_workspace(workspace / "output")
-        write_file(f"sketch_{width}.txt", str(sketch.dlplan_policy))
-        write_file(f"sketch_minimized_{width}.txt", str(sketch_minimized.dlplan_policy))
+        #write_file(f"sketch_{width}.txt", str(sketch.dlplan_policy))
+        #write_file(f"sketch_minimized_{width}.txt", str(sketch_minimized.dlplan_policy))
 
         print_separation_line()
-        print(f"Preprocessing time: {int(preprocessing_timer.get_elapsed_sec()) + 1} seconds.")
-        print(f"ASP time: {int(asp_timer.get_elapsed_sec()) + 1} seconds.")
-        print(f"Verification time: {int(verification_timer.get_elapsed_sec()) + 1} seconds.")
-        print(f"Total time: {int(total_timer.get_elapsed_sec()) + 1} seconds.")
-        print(f"Total memory: {int(memory_usage() / 1024)} GiB.")
-        print("Num states in training data before symmetry pruning:", num_ss_states)
-        print("Num states in training data after symmetry pruning:", num_gfa_states)
+        logging.info(f"Preprocessing time: {int(preprocessing_timer.get_elapsed_sec()) + 1} seconds.")
+        logging.info(f"ASP time: {int(asp_timer.get_elapsed_sec()) + 1} seconds.")
+        logging.info(f"Verification time: {int(verification_timer.get_elapsed_sec()) + 1} seconds.")
+        logging.info(f"Total time: {int(total_timer.get_elapsed_sec()) + 1} seconds.")
+        logging.info(f"Total memory: {int(memory_usage() / 1024)} GiB.")
+        logging.info(f"Num states in training data before symmetry pruning: {num_ss_states}")
+        logging.info(f"Num states in training data after symmetry pruning: {num_gfa_states}")
         print_separation_line()
 
         print(flush=True)
-
-
-
