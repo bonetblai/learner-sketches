@@ -106,6 +106,7 @@ def compute_state_pair_equivalences(preprocessing_data: PreprocessingData,
                 r_idx_to_distance[r_idx] = min(r_idx_to_distance.get(r_idx, math.inf), s_distance)
                 r_idx_to_subgoal_gfa_state_ids[r_idx].add(gfa_state_prime_global_idx)
                 subgoal_gfa_state_id_to_r_idx[gfa_state_prime_global_idx] = r_idx
+        #raise False
 
         gfa_state_id_to_state_pair_equivalence[gfa_state_global_idx] = StatePairEquivalence(r_idx_to_subgoal_gfa_state_ids, r_idx_to_distance, subgoal_gfa_state_id_to_r_idx)
 

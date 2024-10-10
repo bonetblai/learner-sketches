@@ -1,3 +1,5 @@
+import logging
+
 from typing import List, Dict, MutableSet
 from collections import defaultdict
 
@@ -59,8 +61,7 @@ def compute_tuple_graph_equivalences(preprocessing_data: PreprocessingData,
 
         gfa_state_id_to_tuple_graph_equivalence[gfa_state_global_idx] = TupleGraphEquivalence(t_idx_to_r_idxs, t_idx_to_distance, r_idx_to_deadend_distance)
 
-    print("Tuple graph equivalence construction statistics:")
-    print("Num nodes:", num_nodes)
+    logging.info(f"Tuple graph equivalence construction statistics: num_nodes={num_nodes}")
 
     return gfa_state_id_to_tuple_graph_equivalence
 
@@ -120,6 +121,4 @@ def minimize_tuple_graph_equivalences(preprocessing_data: PreprocessingData,
 
         iteration_data.gfa_state_global_idx_to_tuple_graph_equivalence[gfa_state_global_idx] = TupleGraphEquivalence(t_idx_to_r_idxs, t_idx_to_distance, tuple_graph_equivalence.r_idx_to_deadend_distance)
 
-    print("Tuple graph equivalence minimization statistics:")
-    print("Num orig nodes:", num_orig_nodes)
-    print("Num kept nodes:", num_kept_nodes)
+    logging.info(f"Tuple graph equivalence minimization statistics: num_orig_nodes= {num_orig_nodes}, num_kept_nodes={num_kept_nodes}")

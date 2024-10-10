@@ -119,7 +119,6 @@ def compute_instance_datas(domain_filepath: Path,
         # abstractions_options.fa_options.pruning_strategy = mm.ObjectGraphPruningStrategyEnum.StaticScc
         abstractions_options.sort_ascending_by_num_states = True
         abstractions = mm.GlobalFaithfulAbstraction.create(str(domain_filepath), [str(p) for p in instance_filepaths], abstractions_options)
-        logging.info("...done")
         if len(abstractions) == 0:
             return None * 3
 
@@ -131,7 +130,6 @@ def compute_instance_datas(domain_filepath: Path,
         state_space_options = mm.StateSpacesOptions()
         state_space_options.sort_ascending_by_num_states = False
         state_spaces = mm.StateSpace.create(memories, state_space_options)
-        logging.info("...done")
 
         # 2. Create DomainData
         vocabulary_info = create_vocabulary_info(state_spaces[0].get_aag().get_problem().get_domain())
