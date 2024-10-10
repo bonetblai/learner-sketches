@@ -1,15 +1,16 @@
+import logging
 import math
 
 from collections import defaultdict, deque
 from termcolor import colored
-from typing import Dict, List, Deque, MutableSet
+from typing import Dict, Set, List, Deque, MutableSet, Tuple, Any
 
 import pymimir as mm
 import dlplan.core as dlplan_core
 import dlplan.policy as dlplan_policy
+from dlplan.policy import PolicyMinimizer
 
 from .iteration_data import IterationData
-
 from ..preprocessing import PreprocessingData, InstanceData
 
 
@@ -32,6 +33,7 @@ class Sketch:
         """
         instance_data_gfa_states = instance_data.gfa.get_states()
 
+        # The queue contains gfa indices
         queue: Deque[mm.GlobalFaithfulAbstractState] = deque()
         visited: MutableSet[mm.GlobalFaithfulAbstractState] = set()
         # Dominik (25-07-2024): checked, use index.
@@ -51,8 +53,7 @@ class Sketch:
 
             # Dominik (25-07-2024): checked, use index.
             if instance_data.gfa.is_deadend_state(gfa_root_idx):
-                print("Deadend state is r_reachable")
-                print("State:", gfa_root_idx)
+                logging.info(f"Deadend state is r_reachable: state={gfa_root_idx}")
                 return False, []
             elif instance_data.gfa.is_goal_state(gfa_root_idx):
                 continue
@@ -106,24 +107,23 @@ class Sketch:
                 # Decide whether width is bounded or not
                 if found_subgoal_tuple:
                     if require_optimal_width and min_compatible_distance < s_distance:
-                        print(colored("Optimal width disproven.", "red", "on_grey"))
-                        print("Min compatible distance:", min_compatible_distance)
-                        print("Subgoal tuple distance:", s_distance)
+                        logging.info(colored(f"Optimal width disproven.", "red"))
+                        logging.info(f"Min compatible distance: {min_compatible_distance}")
+                        logging.info(f"Subgoal tuple distance: {s_distance}")
                         return False, []
                     else:
                         ḧas_bounded_width = True
                         break
 
             if not ḧas_bounded_width:
-                print(colored("Sketch fails to bound width of a state", "red", "on_grey"))
-                print(instance_data.instance_filepath)
-                print("Instance:", instance_data.idx)
-                print("Source_state:", gfa_root_global_idx)
-                print("Dlplan state:", str(dlplan_ss_root))
+                logging.info(colored(f"Sketch FAILS to bound width of a state in {instance_data.instance_filepath}/{instance_data.idx}, source-state={str(dlplan_ss_root)}/{gfa_root_global_idx}", "red"))
+                #print(instance_data.instance_filepath)
+                #print("Instance:", instance_data.idx)
+                #print("Source_state:", gfa_root_global_idx)
+                #print("Dlplan state:", str(dlplan_ss_root))
                 return False, []
 
-        print("Sketch solves:", instance_data.mimir_ss.get_problem().get_filepath())
-
+        logging.info(colored(f"Sketch has BOUNDED WIDTH on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
         return True, subgoal_states_per_r_reachable_state
 
     def _verify_acyclicity(self, instance_data: InstanceData, r_compatible_successors: Dict[int, int]):
@@ -134,8 +134,8 @@ class Sketch:
             # The depth-first search is the iterative version where the current path is explicit in the stack.
             # https://en.wikipedia.org/wiki/Depth-first_search
             stack = [(s_idx, iter(successors))]
-            s_idxs_on_path = {s_idx,}
-            frontier = set()  # the generated states, to ensure that they are only added once to the stack
+            s_idxs_on_path: Set[int] = {s_idx,}
+            frontier: Set[int] = set()  # the generated states, to ensure that they are only added once to the stack
             while stack:
                 source_idx, iterator = stack[-1]
                 s_idxs_on_path.add(source_idx)
@@ -144,8 +144,8 @@ class Sketch:
                     if instance_data.gfa.is_goal_state(gfa_target_idx):
                         continue
                     if gfa_target_idx in s_idxs_on_path:
-                        print(colored("Sketch cycles", "red", "on_grey"))
-                        print("Instance:", instance_data.idx)
+                        logging.info(colored(f"Sketch CYCLES on  {instance_data.mimir_ss.get_problem().get_filepath()}/{instance_data.idx}", "red"))
+                        #print("Instance:", instance_data.idx)
                         for s_idx in s_idxs_on_path:
                             print(f"{s_idx}")
                         print(f"{gfa_target_idx}")
@@ -156,6 +156,8 @@ class Sketch:
                 except StopIteration:
                     s_idxs_on_path.discard(source_idx)
                     stack.pop(-1)
+
+        logging.info(colored(f"Sketch is ACYCLIC on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
         return True
 
     def _compute_state_b_values(self, booleans: List[dlplan_policy.NamedBoolean], numericals: List[dlplan_policy.NamedNumerical], state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches):
@@ -205,6 +207,7 @@ class Sketch:
             (2) sketch only classifies delta optimal state pairs as good,
             (3) sketch is acyclic, and
             (4) sketch features separate goals from nongoal states. """
+        logging.info(colored(f"Verifying sketch solvability on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
         bounded, subgoal_states_per_r_reachable_state = self._verify_bounded_width(preprocessing_data, iteration_data, instance_data)
         if not bounded:
             return False
@@ -213,7 +216,12 @@ class Sketch:
                 return False
         if not self._verify_acyclicity(instance_data, subgoal_states_per_r_reachable_state):
             return False
+
+        logging.info(colored(f"Sketch SOLVES {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
         return True
+
+    def minimize(self, policy_builder: Any):
+        return Sketch(PolicyMinimizer().minimize(self.dlplan_policy, policy_builder), self.width)
 
     def print(self):
         print(str(self.dlplan_policy))
