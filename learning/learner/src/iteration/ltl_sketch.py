@@ -50,11 +50,10 @@ class LTLSketch:
             gfa_state = instance_data_gfa_states[gfa_state_idx]
             dlplan_ss_initial_state = preprocessing_data.state_finder.get_dlplan_ss_state(gfa_state)
             initial_q = self.dfa.initial_state(dlplan_ss_initial_state, instance_data.denotations_caches)
-            raise False
             pair = (initial_q, gfa_state_idx)
             queue.append(pair)
             visited.add(pair)
-            #print(f'Queue: PUSH {pair} (initial)')
+            logging.debug(f"Queue: PUSH {pair} (initial)")
         # byproduct for acyclicity check
         subgoal_states_per_r_reachable_state: Dict[Tuple[int, int], Set[Tuple[int, int]]] = defaultdict(set)
         cur_instance_idx = instance_data.idx
@@ -63,7 +62,7 @@ class LTLSketch:
             assert cur_instance_idx == instance_data.idx
 
             q_root, gfa_root_idx = queue.pop()
-            #print(f'Queue: POP {(q_root, gfa_root_idx)}, Q={queue}')
+            logging.debug(f"Queue: POP {(q_root, gfa_root_idx)}, Q={queue}")
             gfa_root = instance_data_gfa_states[gfa_root_idx]
             gfa_root_global_idx = gfa_root.get_global_index()
             #print(f'Root: q_root={q_root}, gfa_root_idx={gfa_root_idx}, gfa_root_global_idx={gfa_root_global_idx}')
@@ -104,7 +103,7 @@ class LTLSketch:
                         if pair not in visited:
                             visited.add(pair)
                             queue.append(pair)
-                            #print(f'Queue: PUSH {pair}, Q={queue}')
+                            logging.debug(f"Queue: PUSH {pair}, Q={queue}")
 
                 # Check whether there exists a subgoal tuple for which all underlying states are subgoal states
                 found_subgoal_tuple = False
@@ -137,11 +136,7 @@ class LTLSketch:
                         break
 
             if not ḧas_bounded_width:
-                logging.info(colored(f"Sketch FAILS to bound width of a state in {instance_data.instance_filepath}/{instance_data.idx}, source-state={str(dlplan_ss_root)}/{gfa_root_global_idx}", "red"))
-                #print(instance_data.instance_filepath)
-                #print("Instance:", instance_data.idx)
-                #print("Source_state:", gfa_root_global_idx)
-                #print("Dlplan state:", str(dlplan_ss_root))
+                logging.info(colored(f"Sketch FAILS to bound width of a state in {instance_data.instance_filepath}/{instance_data.idx}, source={str(dlplan_ss_root)}/{gfa_root_global_idx}", "red"))
                 return False, []
 
         logging.info(colored(f"Sketch has BOUNDED WIDTH on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
@@ -166,7 +161,6 @@ class LTLSketch:
                         continue
                     if (target_q, gfa_target_idx) in pairs_on_path:
                         logging.info(colored(f"Sketch CYCLES on  {instance_data.mimir_ss.get_problem().get_filepath()}/{instance_data.idx}", "red"))
-                        #print("Instance:", instance_data.idx)
                         for pair in pairs_on_path:
                             print(f"{pair}")
                         print(f"{(target_q, gfa_target_idx)}")
