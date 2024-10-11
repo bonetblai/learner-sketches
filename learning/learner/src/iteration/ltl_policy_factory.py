@@ -67,8 +67,7 @@ class LTLD2sepDlplanPolicyFactory(DlplanPolicyFactory):
                 #_print_symbol(symbol)
                 pass
 
-        ltl_features = iteration_data.additional_booleans_map
-        ltl_policy = LTLPolicy.make_policy(rules, ltl_features, policy_builder)
+        ltl_policy = LTLPolicy.make_policy(rules, policy_builder)
         return ltl_policy
 
 def _print_symbol(symbol):
