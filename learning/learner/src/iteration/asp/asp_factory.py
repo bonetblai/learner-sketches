@@ -16,6 +16,7 @@ from .encoding_type import EncodingType
 
 from ...preprocessing.preprocessing_data import PreprocessingData
 from ..iteration_data import IterationData
+from ..ltl_base  import DFA
 
 
 LIST_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
@@ -59,11 +60,19 @@ class ASPFactory:
         self.ctl.add("d_distance", ["s", "r", "d"], "d_distance(s,r,d).")
         self.ctl.add("r_distance", ["s", "r", "d"], "r_distance(s,r,d).")
         self.ctl.add("s_distance", ["s1", "s2", "d"], "s_distance(s1,s2,d).")
+        # LTL dfa
+        self.ctl.add("dfa_state", ["q"], "dfa_state(q).")
+        self.ctl.add("dfa_tr", ["q1", "q2", "label"], "dfa_tr(q1,q2,label).")
+        self.ctl.add("dfa_initial", ["q"], "dfa_initial(q).")
+        self.ctl.add("dfa_accepting", ["q"], "dfa_accepting(q).")
+        self.ctl.add("dfa_consistent", ["s", "label"], "dfa_consistent(s,label).")
 
         if encoding_type == EncodingType.D2:
             self.ctl.load(str(LIST_DIR / "sketch-d2.lp"))
         elif encoding_type == EncodingType.EXPLICIT:
             self.ctl.load(str(LIST_DIR / "sketch-explicit.lp"))
+        elif encoding_type == EncodingType.D2_LTL:
+            self.ctl.load(str(LIST_DIR / "sketch-d2-ltl.lp"))
         else:
             raise RuntimeError("Unknown encoding type:", encoding_type)
 
@@ -286,10 +295,62 @@ class ASPFactory:
 
         return facts
 
+    def _create_dfa_state_fact(self, q: int):
+        return ("dfa_state", (Number(q),))
+
+    def _create_dfa_tr_fact(self, q1: int, q2: int, lab: str):
+        return ("dfa_tr", (Number(q1), Number(q2), String(lab)))
+
+    def _create_dfa_initial_fact(self, q: int):
+        return ("dfa_initial", (Number(q),))
+
+    def _create_dfa_accepting_fact(self, q: int):
+        return ("dfa_accepting", (Number(q),))
+
+    def _create_dfa_consistent_fact(self, gfa_state_global_idx: int, label: str):
+        return ("dfa_consistent", (Number(gfa_state_global_idx), String(label)))
+
+    def _make_dfa_consistent_facts(self,
+                                   dfa: DFA,
+                                   preprocessing_data: PreprocessingData,
+                                   iteration_data: IterationData):
+        facts = []
+        # CHECK: Must fix this manually as there is no yet mechanism to map states to "observable symbols" processed
+        # by the automaton. Hence:
+        #   1. Extra supplied boolean concepts A, B, ... (or equivalent) are mapped into observables a, b, ... (respectively) processed by automaton
+        #   2. State S is consistent with observable a iff S makes true concept A, etc
+        #   3. State S is consistent with label L iff S is consistent with observable a and a is consistent with L
+        #   4. Finally, observable a is consistent with label L iff a |= L
+        for instance_data in iteration_data.instance_datas:
+            for gfa_state in instance_data.gfa.get_states():
+                dlplan_source_ss_state = preprocessing_data.state_finder.get_dlplan_ss_state(gfa_state)
+                labels_interpretation = dfa.get_labels_interpretation(dlplan_source_ss_state, instance_data.denotations_caches)
+                gfa_state_global_idx = gfa_state.get_global_index()
+                for label in dfa.labels:
+                    if label.is_consistent(labels_interpretation):
+                        facts.append(self._create_dfa_consistent_fact(gfa_state_global_idx, str(label)))
+        return facts
+
+    def _make_dfa_facts(self,
+                        dfa: DFA,
+                        preprocessing_data: PreprocessingData,
+                        iteration_data: IterationData):
+        facts = []
+        for q in range(1, dfa.num_states + 1):
+            facts.append(self._create_dfa_state_fact(q))
+        for (q1, q2, label) in dfa.transitions:
+            facts.append(self._create_dfa_tr_fact(q1, q2, str(label)))
+        facts.append(self._create_dfa_initial_fact(dfa.initial))
+        for q in dfa.accepting:
+            facts.append(self._create_dfa_accepting_fact(q))
+        facts.extend(self._make_dfa_consistent_facts(dfa, preprocessing_data, iteration_data))
+        return facts
+
 
     def make_facts(self,
                    preprocessing_data: PreprocessingData,
-                   iteration_data: IterationData):
+                   iteration_data: IterationData,
+                   dfa):
         facts = []
         facts.extend(self._make_state_space_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_domain_feature_data_facts(preprocessing_data, iteration_data))
@@ -297,10 +358,22 @@ class ASPFactory:
         facts.extend(self._make_state_pair_equivalence_data_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_tuple_graph_equivalence_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_tuple_graph_facts(preprocessing_data, iteration_data))
+        facts.extend(self._make_dfa_facts(dfa, preprocessing_data, iteration_data))
         return facts
 
     def _create_d2_separate_fact(self, r_idx_1: int, r_idx_2: int):
         return ("d2_separate", (Number(r_idx_1), Number(r_idx_2)))
+
+    def make_initial_d2_facts_alt(self,
+                                  preprocessing_data: PreprocessingData,
+                                  iteration_data: IterationData):
+        facts = []
+        # State pair facts
+        for r_idx, _ in enumerate(iteration_data.state_pair_equivalences):
+            for r_idx2, _ in enumerate(iteration_data.state_pair_equivalences):
+                if r_idx != r_idx2:
+                    facts.append(self._create_d2_separate_fact(r_idx, r_idx2))
+        return facts
 
     def make_initial_d2_facts(self,
                               preprocessing_data: PreprocessingData,
