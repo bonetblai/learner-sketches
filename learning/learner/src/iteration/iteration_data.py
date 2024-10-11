@@ -20,7 +20,6 @@ class IterationData:
     gfa_states: List[mm.GlobalFaithfulAbstractState] = None
 
     feature_pool: List[Feature] = None
-    additional_features_map: Dict[str, Tuple[Feature, Feature, int]] = None
     gfa_state_global_idx_to_feature_evaluations: Dict[int, List[Union[bool, int]]] = None
 
     state_pair_equivalences: List[dlplan_policy.Rule] = None

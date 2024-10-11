@@ -33,7 +33,7 @@ class Literal(Term):
 
     def is_consistent(self, interp: Dict[str, bool]) -> bool:
         value = interp[self.atom] != self.negated
-        print(f'is_consistent: interp={interp}, literal={str(self)}, value={value}')
+        #print(f'is_consistent: interp={interp}, literal={str(self)}, value={value}')
         return interp[self.atom] != self.negated
 
     def __str__(self) -> str:
@@ -68,7 +68,7 @@ class DFA(object):
         self.alphabet = [label.get_atoms() for label in self.labels]
         self.alphabet = set([atom for atoms in self.alphabet for atom in atoms]) - {'true'}
 
-        self.features_map : Dict[str, Tuple[Feature, Feature, int]] = None
+        self.features_map : Dict[str, Tuple[Feature, str, int]] = None
         self.features : List[Feature] = None
 
         self.num_states = len(self.states)
@@ -105,23 +105,38 @@ class DFA(object):
             parsed_literals = [self._parse_literals([literal]) for literal in literals]
             return Conjunction(parsed_literals)
 
-    def set_features(self, features_map: Dict[str, Tuple[Feature, Feature, int]]):
-        self.features_map = features_map
-        self.features = [None] * len(self.features_map)
-        for _, (orig_feature, feature, index) in self.features_map.items():
-            assert index < len(self.features)
-            self.features[index] = feature
+    def set_features(self, labels: List[str], syntactic_element_factory):
+        self.features_map: Dict[str, Tuple[Feature, int]] = dict()
+        self.features: List[Feature] = []
+        for i, label_str in enumerate(labels):
+            end_of_feature = label_str.rfind(')')
+            feature_str = label_str[:end_of_feature + 1]
+            condition = label_str[end_of_feature + 1]
+            value = int(label_str[end_of_feature + 2:])
+            assert condition in ['>', '=']
+            assert value == 0
+
+            feature = None
+            if feature_str[0] == 'b':
+                boolean = syntactic_element_factory.parse_boolean(feature_str)
+                feature = Feature(boolean, boolean.compute_complexity() + 1)
+            elif feature_str[0] == 'n':
+                numerical = syntactic_element_factory.parse_numerical(feature_str)
+                feature = Feature(numerical, numerical.compute_complexity() + 1)
+            else:
+                logging.error(f"Error: Unrecognized feature in label '{label}'")
+                return
+
+            self.features_map[chr(ord('a') + i)] = (feature, condition, value)
+            self.features.append(feature)
 
     def get_labels_interpretation(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> Dict[str, bool]:
-        labels = [chr(ord('a') + i) for i in range(len(self.features))]
-        labels_interpretation = { chr(ord('a') + i) : False for i in range(len(self.features)) }
-        for (feature_name, (orig_feature, feature, index)) in self.features_map.items():
-            value = int(feature.dlplan_feature.evaluate(dlplan_ss_state, denotations_caches))
-            labels_interpretation[labels[index]] = (value == 1)
-            orig_value = int(orig_feature.dlplan_feature.evaluate(dlplan_ss_state, denotations_caches))
-            print(f'Feature: idx={index}, feature={str(orig_feature._dlplan_feature)}/{orig_feature.complexity}, dlplan_ss_state={dlplan_ss_state}, value={orig_value}')
-            print(f'Feature: idx={index}, feature={str(feature._dlplan_feature)}/{feature.complexity}, dlplan_ss_state={dlplan_ss_state}, value={value}')
-        print(f'DFA: interpretations: dlplan_ss_state={dlplan_ss_state}, labels_interpretation={labels_interpretation}')
+        labels_interpretation: Dict[str, bool] = dict()
+        for (label, (feature, condition, value)) in self.features_map.items():
+            feature_value = int(feature.dlplan_feature.evaluate(dlplan_ss_state, denotations_caches))
+            labels_interpretation[label] = feature_value > value if condition == '>' else feature_value == value
+            #print(f'Feature: feature={str(feature._dlplan_feature)}/{feature.complexity}, dlplan_ss_state={dlplan_ss_state}, value={labels_interpretation[label]}')
+        #print(f'DFA: interpretations: dlplan_ss_state={dlplan_ss_state}, labels_interpretation={labels_interpretation}')
         return labels_interpretation
 
     def initial_state(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> int:
@@ -129,10 +144,9 @@ class DFA(object):
         assert self.initial in self.tr_function
         for label, q in self.tr_function[self.initial].items():
             if label.is_consistent(labels_interpretation):
-                print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={label}')
-                raise False
+                #print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={label}')
                 return q
-        print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={None}')
+        #print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={None}')
         raise False
 
     def next_state(self, q: int, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> Tuple[Term, int]:

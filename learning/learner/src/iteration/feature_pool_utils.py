@@ -1,3 +1,5 @@
+import logging
+
 from enum import Enum
 from typing import List, Dict
 
@@ -64,15 +66,21 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
             feature_limit)
         for numerical in generated_numericals:
             features.append(Feature(numerical, numerical.compute_complexity() + 1))
+            #print(f'BLAI: ADDn: {features[-1]._dlplan_feature}/{features[-1].complexity}') # BLAI
         for boolean in generated_booleans:
             features.append(Feature(boolean, boolean.compute_complexity() + 1 + 1))
+            #print(f'BLAI: ADDb: {features[-1]._dlplan_feature}/{features[-1].complexity}') # BLAI
+
     for numerical in additional_numericals:
         numerical = syntactic_element_factory.parse_numerical(numerical)
-        features.append(Feature(numerical, numerical.compute_complexity() + 1))
+        feature = Feature(numerical, numerical.compute_complexity() + 1)
+        features.append(feature)
     for boolean in additional_booleans:
         boolean = syntactic_element_factory.parse_boolean(boolean)
-        features.append(Feature(boolean, boolean.compute_complexity() + 1 + 1))
-    print("Features generated:", len(features))
+        feature = Feature(boolean, boolean.compute_complexity() + 1 + 1)
+        features.append(feature)
+
+    logging.info(f"Features generated: {len(features)}")
 
     # Prune features that never reach 0/False
     if enable_incomplete_feature_pruning:
@@ -88,7 +96,7 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
             if not always_nnz:
                 selected_features.append(feature)
         features = selected_features
-        print("Features after 0/1 pruning (incomplete):", len(selected_features))
+        logging.info(f"Features after 0/1 pruning (incomplete): {len(selected_features)}")
 
         # Prune features that decrease by more than 1 on a state transition
         soft_changing_features = set()
@@ -121,10 +129,11 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
                     break
             if is_soft_changing:
                 soft_changing_features.add(feature)
+                #print(f'BLAI: ADD: {feature._dlplan_feature}/{feature.complexity}') # BLAI
         features = list(soft_changing_features)
-        print("Features after soft changes pruning (incomplete):", len(features))
+        logging.info(f"Features after soft changes pruning (incomplete): {len(features)}")
 
-    # Prune features that do have same feature change a long all state pairs.
+    # Prune features that do have same feature change along all state pairs.
     feature_changes = dict()
     num_pruned = 0
     for feature in features:
@@ -156,14 +165,16 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
                             changes.append(FeatureChange.DOWN)
                         else:
                             changes.append(FeatureChange.BOT)
+
         existing_feature = feature_changes.get(tuple(changes), None)
         if existing_feature is None:
             feature_changes[tuple(changes)] = feature
         else:
             if existing_feature.complexity > feature.complexity:
+                #print(f"BLAI: {existing_feature._dlplan_feature}/{existing_feature.complexity} REPLACED-BY {feature._dlplan_feature}/{feature.complexity}")
                 feature_changes[tuple(changes)] = feature
             num_pruned += 1
     features = list(feature_changes.values())
-    print("Features after relevant changes pruning (complete):", len(features))
+    logging.info(f"Features after relevant changes pruning (complete): {len(features)}")
 
     return features

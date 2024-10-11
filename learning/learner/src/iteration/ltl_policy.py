@@ -24,13 +24,12 @@ class LTLRule:
         return ltl_rule_str
 
 class LTLPolicy:
-    def __init__(self, dlplan_rules: Dict[int, Set[LTLRule]], dlplan_policies: Dict[int, dlplan_policy.Policy], features: Dict[str, Tuple[None, int]]):
+    def __init__(self, dlplan_rules: Dict[int, Set[LTLRule]], dlplan_policies: Dict[int, dlplan_policy.Policy]):
         self.dlplan_rules = dlplan_rules
         self.dlplan_policies = dlplan_policies
-        self.features = features
 
     @staticmethod
-    def make_policy(ltl_rules: Set[LTLRule], features: Dict[str, Tuple[None, int]], policy_builder: Any):
+    def make_policy(ltl_rules: Set[LTLRule], policy_builder: Any):
         dlplan_rules: Dict[int, Set[LTLRule]] = defaultdict(set)
         for ltl_rule in ltl_rules:
             q1 = ltl_rule.q1
@@ -41,17 +40,15 @@ class LTLPolicy:
             dlplan_rules_for_state = dlplan_rules[q1]
             dlplan_policies[q1] = policy_builder.make_policy(dlplan_rules_for_state)
 
-        return LTLPolicy(dlplan_rules, dlplan_policies, features)
+        return LTLPolicy(dlplan_rules, dlplan_policies)
 
     # If transition (q,s) -> (q',s') is compatible with rule r, return (q',r). Else, return (None, None)
     def evaluate(self, q, dlplan_ss_state: dlplan_core.State, dlplan_ss_state_prime: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches, dfa: DFA):
         if q in self.dlplan_rules:
             label, q_prime = dfa.next_state(q, dlplan_ss_state_prime, denotations_caches)
-            #print(f'EVALUATE: q={q}, dlplan_ss_state={dlplan_ss_state}, dlplan_ss_state_prime={dlplan_ss_state_prime}, label={label}, q_prime={q_prime}')
             for rule in self.dlplan_rules[q]:
                 conditions = rule.evaluate_conditions(dlplan_ss_state, denotations_caches)
                 effects = rule.evaluate_effects(dlplan_ss_state, dlplan_ss_state_prime, denotations_caches)
-                #print(f'Rule: rule={rule}, conditions={conditions}, effects={effects}')
                 if conditions and effects:
                     return rule, q_prime
         return None, None
@@ -65,7 +62,7 @@ class LTLPolicy:
             for rule in dlplan_policy_minimized.get_rules():
                 minimized_dlplan_rules[q].add(rule)
 
-        return LTLPolicy(minimized_dlplan_rules, minimized_dlplan_policies, self.features)
+        return LTLPolicy(minimized_dlplan_rules, minimized_dlplan_policies)
 
     def print(self):
         keys = sorted(self.dlplan_policies.keys())

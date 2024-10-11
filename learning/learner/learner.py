@@ -49,6 +49,7 @@ def learn_sketch_for_problem_class(
     additional_numericals: List[str] = None,
     enable_dump_files: bool = False,
     ppltl_goal_str: str = "",
+    ltl_labels: List[str] = None,
 ):
     # Setup arguments and workspace
     if additional_booleans is None:
@@ -66,17 +67,6 @@ def learn_sketch_for_problem_class(
     asp_timer = Timer(stopped=True)
     verification_timer = Timer(stopped=True)
 
-    # Generate DFA from PPLTL spec (if any)
-    ppltl_dfa = None
-    if ppltl_goal_str:
-        ppltl_dfa = make_dfa(ppltl_goal_str)
-        #print(ppltl_dfa)
-        logging.info(f'dfa: transitions: {[(q1, q2, str(label)) for (q1, q2, label) in ppltl_dfa.transitions]}')
-        logging.info(f'dfa: initial: {ppltl_dfa.initial}')
-        logging.info(f'dfa: accepting: {ppltl_dfa.accepting}')
-        logging.info(f'dfa: labels: {[str(label) for label in ppltl_dfa.labels]}')
-        logging.info(f'dfa: alphabet: {ppltl_dfa.alphabet}')
-
     # Generate data
     with change_dir("input"):
         logging.info(colored("Constructing InstanceDatas...", "blue"))
@@ -91,6 +81,23 @@ def learn_sketch_for_problem_class(
 
     preprocessing_data = PreprocessingData(domain_data, instance_datas, state_finder, gfa_state_id_to_tuple_graph)
     preprocessing_timer.stop()
+
+    # Generate DFA from PPLTL spec (if any)
+    ppltl_dfa = None
+    if ppltl_goal_str:
+        ppltl_dfa = make_dfa(ppltl_goal_str)
+        #print(ppltl_dfa)
+        logging.info(f'dfa: transitions: {[(q1, q2, str(label)) for (q1, q2, label) in ppltl_dfa.transitions]}')
+        logging.info(f'dfa: initial: {ppltl_dfa.initial}')
+        logging.info(f'dfa: accepting: {ppltl_dfa.accepting}')
+        logging.info(f'dfa: labels: {[str(label) for label in ppltl_dfa.labels]}')
+        logging.info(f'dfa: alphabet: {ppltl_dfa.alphabet}')
+        if ltl_labels is not None:
+            syntactic_element_factory = preprocessing_data.domain_data.syntactic_element_factory
+            ppltl_dfa.set_features(ltl_labels, syntactic_element_factory)
+        else:
+            logging.error(f"Error: LTL labels must be supplied when using --ppltl-goal; use --ltl_labels")
+            return
 
     logging.info(f'Training: instances={[instance_data.mimir_ss.get_problem().get_filepath() for instance_data in instance_datas]}')
 
@@ -120,7 +127,7 @@ def learn_sketch_for_problem_class(
                 iteration_data.gfa_states = list(gfa_states)
 
                 logging.info(colored("Initializing DomainFeatureData...", "blue"))
-                iteration_data.feature_pool, iteration_data.additional_features_map = compute_feature_pool(
+                iteration_data.feature_pool = compute_feature_pool(
                     preprocessing_data,
                     iteration_data,
                     gfa_state_id_to_tuple_graph,
@@ -148,10 +155,6 @@ def learn_sketch_for_problem_class(
                 logging.info(colored("Minimizing TupleGraphEquivalences...", "blue"))
                 minimize_tuple_graph_equivalences(preprocessing_data, iteration_data)
                 preprocessing_timer.stop()
-
-                # Set features in LTL automata  (if any)
-                if ppltl_dfa is not None:
-                    ppltl_dfa.set_features(iteration_data.additional_features_map)
 
                 asp_timer.resume()
                 if encoding_type == EncodingType.D2 or encoding_type == EncodingType.D2_LTL:
