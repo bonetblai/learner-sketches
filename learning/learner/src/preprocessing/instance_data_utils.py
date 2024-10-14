@@ -163,7 +163,7 @@ def compute_instance_datas(domain_filepath: Path,
             else:
                 initial_gfa_state_idxs = [state_idx for state_idx in range(gfa.get_num_states()) if gfa.is_alive_state(state_idx)]
 
-            logging.info(f"Created InstanceData with num concrete states: {mimir_ss.get_num_states()} and num abstract states: {gfa.get_num_states()}")
+            logging.info(f"Created InstanceData with num concrete states: {mimir_ss.get_num_states()}, num abstract states: {gfa.get_num_states()}, and num initial states: {len(initial_gfa_state_idxs)}")
             instance_data = InstanceData(instance_idx, dlplan_core.DenotationsCaches(), mimir_ss.get_problem().get_filepath(), gfa, mimir_ss, dlplan_ss, ss_state_idx_to_gfa_state_idx, initial_gfa_state_idxs)
             instance_datas.append(instance_data)
             instance_idx += 1

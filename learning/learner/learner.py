@@ -93,10 +93,14 @@ def learn_sketch_for_problem_class(
         logging.info(f'dfa: labels: {[str(label) for label in ppltl_dfa.labels]}')
         logging.info(f'dfa: alphabet: {ppltl_dfa.alphabet}')
         if ltl_labels is not None:
-            syntactic_element_factory = preprocessing_data.domain_data.syntactic_element_factory
-            ppltl_dfa.set_features(ltl_labels, syntactic_element_factory)
+            if len(ltl_labels) == len(ppltl_dfa.alphabet):
+                syntactic_element_factory = preprocessing_data.domain_data.syntactic_element_factory
+                ppltl_dfa.set_features(ltl_labels, syntactic_element_factory)
+            else:
+                logging.error(f"Error: insufficient LTL labels; expecting {len(ppltl_dfa.alphabet)} label(s)")
+                return
         else:
-            logging.error(f"Error: LTL labels must be supplied when using --ppltl-goal; use --ltl_labels")
+            logging.error(f"Error: LTL labels must be supplied when using --ppltl-goal; use --ltl-labels")
             return
 
     logging.info(f'Training: instances={[instance_data.mimir_ss.get_problem().get_filepath() for instance_data in instance_datas]}')

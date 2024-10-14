@@ -3,6 +3,7 @@
 import argparse
 
 from pathlib import Path
+from sys import argv
 
 from learner.learner import learn_sketch_for_problem_class
 from learner.src.iteration import EncodingType
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     parser.add_argument("--ltl-labels", nargs='*', default=None, help="Features that identify the labels for the goal formula")
 
     args = parser.parse_args()
+
+    print(f"Call: python {' '.join(argv)}")
 
     learn_sketch_for_problem_class(args.domain_filepath.resolve(),
                                    args.problems_directory.resolve(),
