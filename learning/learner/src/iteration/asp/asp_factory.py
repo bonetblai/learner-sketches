@@ -315,12 +315,6 @@ class ASPFactory:
                                    preprocessing_data: PreprocessingData,
                                    iteration_data: IterationData):
         facts = []
-        # CHECK: Must fix this manually as there is no yet mechanism to map states to "observable symbols" processed
-        # by the automaton. Hence:
-        #   1. Extra supplied boolean concepts A, B, ... (or equivalent) are mapped into observables a, b, ... (respectively) processed by automaton
-        #   2. State S is consistent with observable a iff S makes true concept A, etc
-        #   3. State S is consistent with label L iff S is consistent with observable a and a is consistent with L
-        #   4. Finally, observable a is consistent with label L iff a |= L
         for instance_data in iteration_data.instance_datas:
             for gfa_state in instance_data.gfa.get_states():
                 dlplan_source_ss_state = preprocessing_data.state_finder.get_dlplan_ss_state(gfa_state)
@@ -333,24 +327,42 @@ class ASPFactory:
 
     def _make_dfa_facts(self,
                         dfa: DFA,
+                        scc_index: int,
                         preprocessing_data: PreprocessingData,
                         iteration_data: IterationData):
-        facts = []
-        for q in range(1, dfa.num_states + 1):
-            facts.append(self._create_dfa_state_fact(q))
-        for (q1, q2, label) in dfa.transitions:
-            facts.append(self._create_dfa_tr_fact(q1, q2, str(label)))
-        facts.append(self._create_dfa_initial_fact(dfa.initial))
-        for q in dfa.accepting:
-            facts.append(self._create_dfa_accepting_fact(q))
-        facts.extend(self._make_dfa_consistent_facts(dfa, preprocessing_data, iteration_data))
-        return facts
+        # Obtain initial//exit points for given SCC
+        scc_states = dfa.sccs.get(scc_index, None)
+        scc_initial_states = dfa.scc_initial_states[scc_index]
+        scc_exit_points = dfa.scc_exit_points[scc_index]
+        assert len(scc_initial_states) > 0 and len(scc_exit_points) > 0
+        assert scc_initial_states.issubset(scc_states)
 
+        # Generate DFA facts for given SCC
+        facts = []
+
+        for q in scc_states | set(scc_exit_points):
+            facts.append(self._create_dfa_state_fact(q))
+
+        for q in scc_initial_states:
+            facts.append(self._create_dfa_initial_fact(q))
+
+        for q in scc_exit_points:
+            facts.append(self._create_dfa_accepting_fact(q))
+
+        for q in scc_states:
+            for label, qp in dfa.tr_function[q].items():
+                facts.append(self._create_dfa_tr_fact(q, qp, str(label)))
+
+        # Generate label information for planning states
+        facts.extend(self._make_dfa_consistent_facts(dfa, preprocessing_data, iteration_data))
+
+        return facts
 
     def make_facts(self,
                    preprocessing_data: PreprocessingData,
                    iteration_data: IterationData,
-                   dfa):
+                   dfa: DFA = None,
+                   scc_index: int = None):
         facts = []
         facts.extend(self._make_state_space_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_domain_feature_data_facts(preprocessing_data, iteration_data))
@@ -358,7 +370,11 @@ class ASPFactory:
         facts.extend(self._make_state_pair_equivalence_data_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_tuple_graph_equivalence_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_tuple_graph_facts(preprocessing_data, iteration_data))
-        facts.extend(self._make_dfa_facts(dfa, preprocessing_data, iteration_data))
+
+        if dfa is not None:
+            assert scc_index is not None
+            facts.extend(self._make_dfa_facts(dfa, scc_index, preprocessing_data, iteration_data))
+
         return facts
 
     def _create_d2_separate_fact(self, r_idx_1: int, r_idx_2: int):

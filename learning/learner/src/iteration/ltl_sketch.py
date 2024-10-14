@@ -18,12 +18,20 @@ from .ltl_policy import LTLPolicy
 
 class LTLSketch:
     def __init__(self, ltl_policy: LTLPolicy, width: int, dfa: DFA):
-        self.ltl_policy = ltl_policy
+        self.ltl_policy = ltl_policy if ltl_policy is not None else LTLPolicy()
         self.width = width
         self.dfa = dfa
         assert self.width == 0, "Only LTL policies supported..."
 
+    def replace(self, ltl_policy: LTLPolicy):
+        for q, rules in ltl_policy.dlplan_rules.items():
+            self.ltl_policy.dlplan_rules[q] = rules
+        for q, policy in ltl_policy.dlplan_policies.items():
+            self.ltl_policy.dlplan_policies[q] = policy
+
     def _verify_bounded_width(self,
+                              dfa_initial_states: List[int],
+                              dfa_final_states: Set[int],
                               preprocessing_data: PreprocessingData,
                               iteration_data: IterationData,
                               instance_data: InstanceData,
@@ -40,23 +48,21 @@ class LTLSketch:
         # The queue contains pairs (Q, gfa_state_index).
         queue: Deque[Tuple[int, mm.GlobalFaithfulAbstractState]] = deque()
         visited: MutableSet[Tuple[int, mm.GlobalFaithfulAbstractState]] = set()
-        # Dominik (25-07-2024): checked, use index.
-        # Blai (08-10-2024): manually set initial state 0
+
         for gfa_state_idx in instance_data.initial_gfa_state_idxs:
-            print(f"Initial: {gfa_state_idx}")
-        #    queue.append(gfa_state_idx)
-        #    visited.add(gfa_state_idx)
-        for gfa_state_idx in [0]: # HACK: fix initial states, and initial dfa state (there could be an initial "automatic" dfa transition)
             gfa_state = instance_data_gfa_states[gfa_state_idx]
             dlplan_ss_initial_state = preprocessing_data.state_finder.get_dlplan_ss_state(gfa_state)
-            initial_q = self.dfa.initial_state(dlplan_ss_initial_state, instance_data.denotations_caches)
-            pair = (initial_q, gfa_state_idx)
-            queue.append(pair)
-            visited.add(pair)
-            logging.debug(f"Queue: PUSH {pair} (initial)")
-        # byproduct for acyclicity check
+            initial_states = self.dfa.get_initial_states(dfa_initial_states, dlplan_ss_initial_state, instance_data.denotations_caches)
+            for initial_q in initial_states:
+                pair = (initial_q, gfa_state_idx)
+                queue.append(pair)
+                visited.add(pair)
+                logging.debug(f"Queue: PUSH {pair} (initial)")
+
+        # Byproduct for acyclicity check
         subgoal_states_per_r_reachable_state: Dict[Tuple[int, int], Set[Tuple[int, int]]] = defaultdict(set)
         cur_instance_idx = instance_data.idx
+
         while queue:
             # Ensure that we do not reassign instance_data accidentally
             assert cur_instance_idx == instance_data.idx
@@ -71,7 +77,7 @@ class LTLSketch:
             if instance_data.gfa.is_deadend_state(gfa_root_idx):
                 logging.info(f"Deadend state is r_reachable: state={gfa_root_idx}")
                 return False, []
-            elif self.dfa.is_accepting_state(q_root):
+            elif q_root in dfa_final_states:
                 continue
 
             tuple_graph = preprocessing_data.gfa_state_global_idx_to_tuple_graph[gfa_root_global_idx]
@@ -142,7 +148,7 @@ class LTLSketch:
         logging.info(colored(f"Sketch has BOUNDED WIDTH on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
         return True, subgoal_states_per_r_reachable_state
 
-    def _verify_acyclicity(self, instance_data: InstanceData, r_compatible_successors: Dict[Tuple[int, int], Set[Tuple[int, int]]]):
+    def _verify_acyclicity(self, dfa_final_states: Set[int], instance_data: InstanceData, r_compatible_successors: Dict[Tuple[int, int], Set[Tuple[int, int]]]):
         """
         Returns True iff sketch is acyclic, i.e., no infinite trajectories s1,s2,... are possible.
         """
@@ -157,7 +163,7 @@ class LTLSketch:
                 pairs_on_path.add((source_q, source_idx))
                 try:
                     (target_q, gfa_target_idx) = next(iterator)
-                    if self.dfa.is_accepting_state(target_q):
+                    if target_q in dfa_final_states:
                         continue
                     if (target_q, gfa_target_idx) in pairs_on_path:
                         logging.info(colored(f"Sketch CYCLES on  {instance_data.mimir_ss.get_problem().get_filepath()}/{instance_data.idx}", "red"))
@@ -212,6 +218,7 @@ class LTLSketch:
         return True
 
     def solves(self,
+               scc_index: int,
                preprocessing_data: PreprocessingData,
                iteration_data: IterationData,
                instance_data: InstanceData,
@@ -223,13 +230,18 @@ class LTLSketch:
             (3) sketch is acyclic, and
             (4) sketch features separate goals from nongoal states. """
         logging.info(colored(f"Verifying sketch solvability on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
-        bounded, subgoal_states_per_r_reachable_state = self._verify_bounded_width(preprocessing_data, iteration_data, instance_data)
+
+        # Calculate initial/final states for the automaton given SCC index
+        dfa_initial_states = self.dfa.scc_initial_states[scc_index]
+        dfa_final_states = self.dfa.scc_exit_points[scc_index]
+
+        bounded, subgoal_states_per_r_reachable_state = self._verify_bounded_width(dfa_initial_states, dfa_final_states, preprocessing_data, iteration_data, instance_data)
         if not bounded:
             return False
         if enable_goal_separating_features:
             if not self._verify_goal_separating_features(preprocessing_data, iteration_data, instance_data):
                 return False
-        if not self._verify_acyclicity(instance_data, subgoal_states_per_r_reachable_state):
+        if not self._verify_acyclicity(dfa_final_states, instance_data, subgoal_states_per_r_reachable_state):
             return False
 
         logging.info(colored(f"Sketch SOLVES {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))

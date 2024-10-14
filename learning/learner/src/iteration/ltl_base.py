@@ -70,8 +70,6 @@ class DFA(object):
         self.labels : List[Term] = [label for (src, dst, label) in self.transitions]
         self.alphabet = [label.get_atoms() for label in self.labels]
         self.alphabet = set([atom for atoms in self.alphabet for atom in atoms]) - {'true'}
-        self.initial = 1
-        self.accepting = set([2])
 
         self.features_map : Dict[str, Tuple[Feature, str, int]] = None
         self.features : List[Feature] = None
@@ -90,15 +88,23 @@ class DFA(object):
         self.lowlinks: List[int] = [None] * (1 + self.num_states)
         self._compute_strongly_connected_components(self.lowlinks)
 
-        self.entries: List[List[int]] = [[] for _ in range(len(self.sccs))]
-        self.exits: List[List[int]] = [[] for _ in range(len(self.sccs))]
+        self.scc_entry_points: List[Set[int]] = [set() for _ in range(len(self.sccs))]
+        self.scc_exit_points: List[Set[int]] = [set() for _ in range(len(self.sccs))]
         for q in range(1, 1 + self.num_states):
             scc_index_q = self.lowlinks[q]
             for _, qp in self.tr_function[q].items():
                 scc_index_qp = self.lowlinks[qp]
                 if scc_index_qp != scc_index_q:
-                    self.entries[scc_index_qp].append(q)
-                    self.exits[scc_index_q].append(qp)
+                    self.scc_entry_points[scc_index_qp].add(q)
+                    self.scc_exit_points[scc_index_q].add(qp)
+
+        self.scc_initial_states: List[Set[int]] = [set() for _ in range(len(self.sccs))]
+        for scc_index in range(len(self.sccs)):
+            entry_points = self.scc_entry_points[scc_index] if len(self.scc_entry_points[scc_index]) > 0 else set([self.initial])
+            for q in entry_points:
+                for _, qp in self.tr_function[q].items():
+                    if self.lowlinks[qp] == scc_index:
+                        self.scc_initial_states[scc_index].add(qp)
 
     def _parse_dfa(self, dfa_dot):
         init_pattern = re.compile(r'\s*init\s->\s(\d+);', re.MULTILINE)
@@ -205,15 +211,18 @@ class DFA(object):
         #print(f'DFA: interpretations: dlplan_ss_state={dlplan_ss_state}, labels_interpretation={labels_interpretation}')
         return labels_interpretation
 
-    def initial_state(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> int:
+    def get_initial_states(self, scc_initial_states: Set[int], dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> List[int]:
         labels_interpretation = self.get_labels_interpretation(dlplan_ss_state, denotations_caches)
-        assert self.initial in self.tr_function
-        for label, q in self.tr_function[self.initial].items():
-            if label.is_consistent(labels_interpretation):
-                #print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={label}')
-                return q
-        #print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={None}')
-        raise False
+
+        initial_states = []
+        for q in scc_initial_states:
+            for label, qp in self.tr_function[q].items():
+                if label.is_consistent(labels_interpretation):
+                    #print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={label}, q={q}, qp={qp}")
+                    initial_states.append(qp)
+
+        assert len(initial_states) > 0
+        return initial_states
 
     def next_state(self, q: int, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> Tuple[Term, int]:
         labels_interpretation = self.get_labels_interpretation(dlplan_ss_state, denotations_caches)
