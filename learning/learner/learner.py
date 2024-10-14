@@ -8,13 +8,13 @@ import pymimir as mm
 from dlplan.policy import PolicyMinimizer
 
 from .src.exit_codes import ExitCode
-from .src.iteration import EncodingType, ASPFactory, ClingoExitCode, IterationData, LearningStatistics, Sketch, LTLSketch, D2sepDlplanPolicyFactory, LTLD2sepDlplanPolicyFactory, ExplicitDlplanPolicyFactory, compute_feature_pool, compute_per_state_feature_valuations, compute_state_pair_equivalences, compute_tuple_graph_equivalences, minimize_tuple_graph_equivalences
+from .src.iteration import EncodingType, ASPFactory, ClingoExitCode, IterationData, LearningStatistics, Sketch, D2sepDlplanPolicyFactory, ExplicitDlplanPolicyFactory, compute_feature_pool, compute_per_state_feature_valuations, compute_state_pair_equivalences, compute_tuple_graph_equivalences, minimize_tuple_graph_equivalences
 from .src.util import Timer, create_experiment_workspace, change_working_directory, write_file, change_dir, memory_usage, add_console_handler, print_separation_line
 from .src.preprocessing import InstanceData, PreprocessingData, StateFinder, compute_instance_datas, compute_tuple_graphs
 from .src.iteration import make_dfa
 
 
-def compute_smallest_unsolved_instance(
+def _compute_smallest_unsolved_instance(
         preprocessing_data: PreprocessingData,
         iteration_data: IterationData,
         selected_instance_datas: List[InstanceData],
@@ -48,8 +48,6 @@ def learn_sketch_for_problem_class(
     additional_booleans: List[str] = None,
     additional_numericals: List[str] = None,
     enable_dump_files: bool = False,
-    ppltl_goal_str: str = "",
-    ltl_labels: List[str] = None,
 ):
     # Setup arguments and workspace
     if additional_booleans is None:
@@ -81,27 +79,6 @@ def learn_sketch_for_problem_class(
 
     preprocessing_data = PreprocessingData(domain_data, instance_datas, state_finder, gfa_state_id_to_tuple_graph)
     preprocessing_timer.stop()
-
-    # Generate DFA from PPLTL spec (if any)
-    ppltl_dfa = None
-    if ppltl_goal_str:
-        ppltl_dfa = make_dfa(ppltl_goal_str)
-        #print(ppltl_dfa)
-        logging.info(f'dfa: transitions: {[(q1, q2, str(label)) for (q1, q2, label) in ppltl_dfa.transitions]}')
-        logging.info(f'dfa: initial: {ppltl_dfa.initial}')
-        logging.info(f'dfa: accepting: {ppltl_dfa.accepting}')
-        logging.info(f'dfa: labels: {[str(label) for label in ppltl_dfa.labels]}')
-        logging.info(f'dfa: alphabet: {ppltl_dfa.alphabet}')
-        if ltl_labels is not None:
-            if len(ltl_labels) == len(ppltl_dfa.alphabet):
-                syntactic_element_factory = preprocessing_data.domain_data.syntactic_element_factory
-                ppltl_dfa.set_features(ltl_labels, syntactic_element_factory)
-            else:
-                logging.error(f"Error: insufficient LTL labels; expecting {len(ppltl_dfa.alphabet)} label(s)")
-                return
-        else:
-            logging.error(f"Error: LTL labels must be supplied when using --ppltl-goal; use --ltl-labels")
-            return
 
     logging.info(f'Training: instances={[instance_data.mimir_ss.get_problem().get_filepath() for instance_data in instance_datas]}')
 
@@ -161,16 +138,15 @@ def learn_sketch_for_problem_class(
                 preprocessing_timer.stop()
 
                 asp_timer.resume()
-                if encoding_type == EncodingType.D2 or encoding_type == EncodingType.D2_LTL:
+                if encoding_type == EncodingType.D2:
                     d2_facts = set()
                     symbols = None
                     j = 0
                     while True:
                         asp_factory = ASPFactory(encoding_type, enable_goal_separating_features, max_num_rules)
-                        facts = asp_factory.make_facts(preprocessing_data, iteration_data, ppltl_dfa)
+                        facts = asp_factory.make_facts(preprocessing_data, iteration_data)
                         if j == 0:
-                            #d2_facts.update(asp_factory.make_initial_d2_facts(preprocessing_data, iteration_data))
-                            d2_facts.update(asp_factory.make_initial_d2_facts_alt(preprocessing_data, iteration_data))
+                            d2_facts.update(asp_factory.make_initial_d2_facts(preprocessing_data, iteration_data))
                             logging.info(f"Number of initial D2 facts: {len(d2_facts)}")
                         elif j > 0:
                             unsatisfied_d2_facts = asp_factory.make_unsatisfied_d2_facts(iteration_data, symbols)
@@ -199,24 +175,14 @@ def learn_sketch_for_problem_class(
 
                         asp_factory.print_statistics()
 
-                        if encoding_type == EncodingType.D2:
-                            dlplan_policy = D2sepDlplanPolicyFactory().make_dlplan_policy_from_answer_set(symbols, preprocessing_data, iteration_data)
-                            sketch = Sketch(dlplan_policy, width)
-                            logging.info("Learned the following sketch:")
-                            sketch.print()
-                            if compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
-                                # Stop adding D2-separation constraints
-                                # if sketch solves all training instances
-                                break
-                        else:
-                            dlplan_policy = LTLD2sepDlplanPolicyFactory().make_dlplan_policy_from_answer_set(symbols, preprocessing_data, iteration_data)
-                            sketch = LTLSketch(dlplan_policy, width, ppltl_dfa)
-                            logging.info("Learned the following sketch:")
-                            sketch.print()
-                            if compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
-                                # Stop adding D2-separation constraints
-                                # if sketch solves all training instances
-                                break
+                        dlplan_policy = D2sepDlplanPolicyFactory().make_dlplan_policy_from_answer_set(symbols, preprocessing_data, iteration_data)
+                        sketch = Sketch(dlplan_policy, width)
+                        logging.info("Learned the following sketch:")
+                        sketch.print()
+                        if _compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
+                            # Stop adding D2-separation constraints
+                            # if sketch solves all training instances
+                            break
                         j += 1
                 elif encoding_type == EncodingType.EXPLICIT:
                     asp_factory = ASPFactory(encoding_type, enable_goal_separating_features, max_num_rules)
@@ -244,8 +210,8 @@ def learn_sketch_for_problem_class(
 
                 verification_timer.resume()
                 logging.info(colored("Verifying learned sketch...", "blue"))
-                assert compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None
-                smallest_unsolved_instance = compute_smallest_unsolved_instance(preprocessing_data, iteration_data, instance_datas, sketch, enable_goal_separating_features)
+                assert _compute_smallest_unsolved_instance(preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None
+                smallest_unsolved_instance = _compute_smallest_unsolved_instance(preprocessing_data, iteration_data, instance_datas, sketch, enable_goal_separating_features)
                 verification_timer.stop()
 
                 if smallest_unsolved_instance is None:
@@ -286,8 +252,8 @@ def learn_sketch_for_problem_class(
         print_separation_line()
 
         create_experiment_workspace(workspace / "output")
-        #write_file(f"sketch_{width}.txt", str(sketch.dlplan_policy))
-        #write_file(f"sketch_minimized_{width}.txt", str(sketch_minimized.dlplan_policy))
+        write_file(f"sketch_{width}.txt", str(sketch.dlplan_policy))
+        write_file(f"sketch_minimized_{width}.txt", str(sketch_minimized.dlplan_policy))
 
         print_separation_line()
         logging.info(f"Preprocessing time: {int(preprocessing_timer.get_elapsed_sec()) + 1} seconds.")

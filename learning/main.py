@@ -6,6 +6,7 @@ from pathlib import Path
 from sys import argv
 
 from learner.learner import learn_sketch_for_problem_class
+from learner.ltl_learner import ltl_learn_sketch_for_problem_class
 from learner.src.iteration import EncodingType
 
 
@@ -39,26 +40,51 @@ if __name__ == "__main__":
 
     print(f"Call: python {' '.join(argv)}")
 
-    learn_sketch_for_problem_class(args.domain_filepath.resolve(),
-                                   args.problems_directory.resolve(),
-                                   args.workspace.resolve(),
-                                   args.width,
-                                   args.disable_closed_Q,
-                                   args.max_num_states_per_instance,
-                                   args.max_time_per_instance,
-                                   args.encoding_type,
-                                   args.max_num_rules,
-                                   args.enable_goal_separating_features,
-                                   args.disable_feature_generation,
-                                   args.enable_incomplete_feature_pruning,
-                                   args.concept_complexity_limit,
-                                   args.role_complexity_limit,
-                                   args.boolean_complexity_limit,
-                                   args.count_numerical_complexity_limit,
-                                   args.distance_numerical_complexity_limit,
-                                   args.feature_limit,
-                                   args.additional_booleans,
-                                   args.additional_numericals,
-                                   args.enable_dump_files,
-                                   args.ppltl_goal,
-                                   args.ltl_labels)
+    if args.encoding_type == EncodingType.D2_LTL:
+        learner = ltl_learn_sketch_for_problem_class
+        learner(args.domain_filepath.resolve(),
+                args.problems_directory.resolve(),
+                args.workspace.resolve(),
+                args.width,
+                args.disable_closed_Q,
+                args.max_num_states_per_instance,
+                args.max_time_per_instance,
+                args.encoding_type,
+                args.max_num_rules,
+                args.enable_goal_separating_features,
+                args.disable_feature_generation,
+                args.enable_incomplete_feature_pruning,
+                args.concept_complexity_limit,
+                args.role_complexity_limit,
+                args.boolean_complexity_limit,
+                args.count_numerical_complexity_limit,
+                args.distance_numerical_complexity_limit,
+                args.feature_limit,
+                args.additional_booleans,
+                args.additional_numericals,
+                args.enable_dump_files,
+                args.ppltl_goal,
+                args.ltl_labels)
+    else:
+        learner = learn_sketch_for_problem_class
+        learner(args.domain_filepath.resolve(),
+                args.problems_directory.resolve(),
+                args.workspace.resolve(),
+                args.width,
+                args.disable_closed_Q,
+                args.max_num_states_per_instance,
+                args.max_time_per_instance,
+                args.encoding_type,
+                args.max_num_rules,
+                args.enable_goal_separating_features,
+                args.disable_feature_generation,
+                args.enable_incomplete_feature_pruning,
+                args.concept_complexity_limit,
+                args.role_complexity_limit,
+                args.boolean_complexity_limit,
+                args.count_numerical_complexity_limit,
+                args.distance_numerical_complexity_limit,
+                args.feature_limit,
+                args.additional_booleans,
+                args.additional_numericals,
+                args.enable_dump_files)
