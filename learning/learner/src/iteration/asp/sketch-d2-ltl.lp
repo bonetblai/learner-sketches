@@ -20,9 +20,7 @@ nongoal_new(Q) :- dfa_state(Q), not dfa_accepting(Q).
 %r_reachable(S) :- initial(S).
 %r_reachable(S2) :- r_reachable(S), good(S, S2), subgoal_distance(S, D), s_distance(S, S2, D), nongoal(S).
 % (NEW) Define R-reachable pairs; base and inductive case
-r_reachable_new(Q2, S) :- S =  0, initial(S), dfa_initial(Q), dfa_tr(Q, Q2, LABEL), dfa_consistent(S, LABEL). % HACK
-r_reachable_new(Q2, S) :- S = 16, initial(S), dfa_initial(Q), dfa_tr(Q, Q2, LABEL), dfa_consistent(S, LABEL). % HACK
-r_reachable_new(Q2, S) :- S = 32, initial(S), dfa_initial(Q), dfa_tr(Q, Q2, LABEL), dfa_consistent(S, LABEL). % HACK
+r_reachable_new(Q2, S) :- initial(S), dfa_initial(Q), dfa_tr(Q, Q2, LABEL), dfa_consistent(S, LABEL).
 r_reachable_new(Q2, S2) :- r_reachable_new(Q, S), good_new3(Q, S, S2), subgoal_distance_new(Q, S, D), s_distance(S, S2, D), nongoal_new(Q), dfa_tr(Q, Q2, LABEL), dfa_consistent(S2, LABEL).
 
 % (OLD) Define a distance from which to pick at least one subgoal tuple for each R-reachable state
