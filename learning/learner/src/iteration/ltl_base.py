@@ -1,4 +1,7 @@
+import logging
+
 import re
+from collections import deque
 from typing import Dict, Set, Tuple, List, abstractmethod
 
 import dlplan.core as dlplan_core
@@ -67,6 +70,8 @@ class DFA(object):
         self.labels : List[Term] = [label for (src, dst, label) in self.transitions]
         self.alphabet = [label.get_atoms() for label in self.labels]
         self.alphabet = set([atom for atoms in self.alphabet for atom in atoms]) - {'true'}
+        self.initial = 1
+        self.accepting = set([2])
 
         self.features_map : Dict[str, Tuple[Feature, str, int]] = None
         self.features : List[Feature] = None
@@ -79,6 +84,21 @@ class DFA(object):
             if src not in self.tr_function:
                 self.tr_function[src] = dict()
             self.tr_function[src][label] = dst
+
+        # Compute SCCs of automata with entry/exit points
+        self.sccs: Dict[int, Set[int]] = dict()
+        self.lowlinks: List[int] = [None] * (1 + self.num_states)
+        self._compute_strongly_connected_components(self.lowlinks)
+
+        self.entries: List[List[int]] = [[] for _ in range(len(self.sccs))]
+        self.exits: List[List[int]] = [[] for _ in range(len(self.sccs))]
+        for q in range(1, 1 + self.num_states):
+            scc_index_q = self.lowlinks[q]
+            for _, qp in self.tr_function[q].items():
+                scc_index_qp = self.lowlinks[qp]
+                if scc_index_qp != scc_index_q:
+                    self.entries[scc_index_qp].append(q)
+                    self.exits[scc_index_q].append(qp)
 
     def _parse_dfa(self, dfa_dot):
         init_pattern = re.compile(r'\s*init\s->\s(\d+);', re.MULTILINE)
@@ -104,6 +124,52 @@ class DFA(object):
         else:
             parsed_literals = [self._parse_literals([literal]) for literal in literals]
             return Conjunction(parsed_literals)
+
+    # Compute the SCCs of the DFA using Tarjan's algorithm
+    def _find_component(self, q: int, index: int, indices: List[int], lowlinks: List[int], in_stack: List[bool], S: deque) -> int:
+        # Set (depth) index of vertex to smallest unused index
+        indices[q] = index
+        lowlinks[q] = index
+        index = index + 1
+        S.append(q)
+        in_stack[q] = True
+
+        # Expand vertex
+        for _, qp in self.tr_function[q].items():
+            if indices[qp] is None:
+                # Successor qp has not yet been visited; recurse on it
+                index = self._find_component(qp, index, indices, lowlinks, in_stack, S)
+                lowlinks[q] = min(lowlinks[q], lowlinks[qp])
+            elif in_stack[qp]:
+                # Successor qp is in stack and hence in the current SCC
+                # Update its lowlink
+                lowlinks[q] = min(lowlinks[q], lowlinks[qp])
+
+        # If q's index equals its lowlink. then q is "entry point" of its SCC.
+        # The vertices in its SCC are in the stack down to q
+        if lowlinks[q] == indices[q]:
+            assert lowlinks[q] not in self.sccs
+            new_scc: Set[int] = set()
+            while True:
+                assert len(S) > 0
+                qp = S.pop()
+                in_stack[qp] = False
+                new_scc.add(qp)
+                if qp == q: break
+            self.sccs[lowlinks[q]] = new_scc
+
+        return index
+
+    def _compute_strongly_connected_components(self, lowlinks: List[int]):
+        indices: List[int] = [None] * (1 + self.num_states)
+        in_stack: List[bool] = [False] * (1 + self.num_states)
+        assert len(lowlinks) == 1 + self.num_states
+        S = deque()
+        index = 0
+
+        for q in range(1, 1 + self.num_states):
+            if indices[q] is None:
+                index = self._find_component(q, index, indices, lowlinks, in_stack, S)
 
     def set_features(self, labels: List[str], syntactic_element_factory):
         self.features_map: Dict[str, Tuple[Feature, int]] = dict()
