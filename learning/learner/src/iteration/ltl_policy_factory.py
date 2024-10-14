@@ -35,7 +35,6 @@ class LTLD2sepDlplanPolicyFactory(DlplanPolicyFactory):
             elif symbol.name == "dfa_consistent":
                 #_print_symbol(symbol)
                 pass
-        print(f'BLAI: policy: features={[str(feature) for feature in dlplan_features]}')
 
         rules = set()
         for symbol in symbols:
@@ -72,45 +71,45 @@ class LTLD2sepDlplanPolicyFactory(DlplanPolicyFactory):
 
 def _print_symbol(symbol):
     if symbol.name == "good_new":
-        print(f'BLAI: asp: good_new({symbol.arguments[0].number},{symbol.arguments[1].number})')
+        print(f'ASP: Symbol: good_new({symbol.arguments[0].number},{symbol.arguments[1].number})')
         pass
     elif symbol.name == "good_new3":
-        print(f'BLAI: asp: good_new3({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
+        print(f'ASP: Symbol: good_new3({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
         pass
     elif symbol.name == "order_new":
-        print(f'BLAI: asp: order_new({symbol.arguments[0].number},{symbol.arguments[1].number})')
+        print(f'ASP: Symbol: order_new({symbol.arguments[0].number},{symbol.arguments[1].number})')
         pass
     elif symbol.name == "order_new4":
-        print(f'BLAI: asp: order_new4({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number},{symbol.arguments[3].number})')
+        print(f'ASP: Symbol: order_new4({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number},{symbol.arguments[3].number})')
         pass
     elif symbol.name == "r_reachable_new":
-        print(f'BLAI: asp: r_reachable_new({symbol.arguments[0].number},{symbol.arguments[1].number})')
+        print(f'ASP: Symbol: r_reachable_new({symbol.arguments[0].number},{symbol.arguments[1].number})')
         pass
     elif symbol.name == "subgoal_distance_new":
-        print(f'BLAI: asp: subgoal_distance_new({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
+        print(f'ASP: Symbol: subgoal_distance_new({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
         pass
     elif symbol.name == "s_distance":
-        print(f'BLAI: asp: s_distance({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
+        print(f'ASP: Symbol: s_distance({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
         pass
     elif symbol.name == "feature_condition":
-        print(f'BLAI: asp: feature_condition({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
+        print(f'ASP: Symbol: feature_condition({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
         pass
     elif symbol.name == "feature_effect":
-        print(f'BLAI: asp: feature_effect({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
+        print(f'ASP: Symbol: feature_effect({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
         pass
     elif symbol.name == "d2_separate":
-        #print(f'BLAI: asp: d2_separate({symbol.arguments[0].number},{symbol.arguments[1].number})')
+        #print(f'ASP: Symbol: d2_separate({symbol.arguments[0].number},{symbol.arguments[1].number})')
         pass
     elif symbol.name == "cover":
-        print(f'BLAI: asp: cover({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
+        print(f'ASP: Symbol: cover({symbol.arguments[0].number},{symbol.arguments[1].number},{symbol.arguments[2].number})')
         pass
     elif symbol.name == "dfa_tr":
-        print(f'BLAI: asp: dfa_tr({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
+        print(f'ASP: Symbol: dfa_tr({symbol.arguments[0].number},{symbol.arguments[1].number},"{symbol.arguments[2].string}")')
         pass
     elif symbol.name == "dfa_consistent":
-        print(f'BLAI: asp: dfa_consistent({symbol.arguments[0].number},"{symbol.arguments[1].string}")')
+        print(f'ASP: Symbol: dfa_consistent({symbol.arguments[0].number},"{symbol.arguments[1].string}")')
         pass
     elif symbol.name == "initial":
-        print(f'BLAI: asp: initial({symbol.arguments[0].number})')
+        print(f'ASP: Symbol: initial({symbol.arguments[0].number})')
         pass
  

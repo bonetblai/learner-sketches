@@ -66,10 +66,8 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
             feature_limit)
         for numerical in generated_numericals:
             features.append(Feature(numerical, numerical.compute_complexity() + 1))
-            #print(f'BLAI: ADDn: {features[-1]._dlplan_feature}/{features[-1].complexity}') # BLAI
         for boolean in generated_booleans:
             features.append(Feature(boolean, boolean.compute_complexity() + 1 + 1))
-            #print(f'BLAI: ADDb: {features[-1]._dlplan_feature}/{features[-1].complexity}') # BLAI
 
     for numerical in additional_numericals:
         numerical = syntactic_element_factory.parse_numerical(numerical)
@@ -129,7 +127,6 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
                     break
             if is_soft_changing:
                 soft_changing_features.add(feature)
-                #print(f'BLAI: ADD: {feature._dlplan_feature}/{feature.complexity}') # BLAI
         features = list(soft_changing_features)
         logging.info(f"Features after soft changes pruning (incomplete): {len(features)}")
 
@@ -171,7 +168,6 @@ def compute_feature_pool(preprocessing_data: PreprocessingData,
             feature_changes[tuple(changes)] = feature
         else:
             if existing_feature.complexity > feature.complexity:
-                #print(f"BLAI: {existing_feature._dlplan_feature}/{existing_feature.complexity} REPLACED-BY {feature._dlplan_feature}/{feature.complexity}")
                 feature_changes[tuple(changes)] = feature
             num_pruned += 1
     features = list(feature_changes.values())
