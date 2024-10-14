@@ -24,9 +24,9 @@ class LTLRule:
         return ltl_rule_str
 
 class LTLPolicy:
-    def __init__(self, dlplan_rules: Dict[int, Set[LTLRule]], dlplan_policies: Dict[int, dlplan_policy.Policy]):
-        self.dlplan_rules = dlplan_rules
-        self.dlplan_policies = dlplan_policies
+    def __init__(self, dlplan_rules: Dict[int, Set[LTLRule]] = None, dlplan_policies: Dict[int, dlplan_policy.Policy] = None):
+        self.dlplan_rules = dlplan_rules if dlplan_rules is not None else dict()
+        self.dlplan_policies = dlplan_policies if dlplan_policies is not None else dict()
 
     @staticmethod
     def make_policy(ltl_rules: Set[LTLRule], policy_builder: Any):
@@ -43,7 +43,7 @@ class LTLPolicy:
         return LTLPolicy(dlplan_rules, dlplan_policies)
 
     # If transition (q,s) -> (q',s') is compatible with rule r, return (q',r). Else, return (None, None)
-    def evaluate(self, q, dlplan_ss_state: dlplan_core.State, dlplan_ss_state_prime: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches, dfa: DFA):
+    def evaluate(self, q: int, dlplan_ss_state: dlplan_core.State, dlplan_ss_state_prime: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches, dfa: DFA):
         if q in self.dlplan_rules:
             label, q_prime = dfa.next_state(q, dlplan_ss_state_prime, denotations_caches)
             for rule in self.dlplan_rules[q]:
