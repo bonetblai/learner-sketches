@@ -2,12 +2,38 @@ import logging
 
 import re
 from collections import deque
-from typing import Dict, Set, Tuple, List, abstractmethod
+from typing import Dict, Set, Tuple, List, Any, abstractmethod
 
 import dlplan.core as dlplan_core
 from .feature_pool import Feature
 from ltlf2dfa.parser.ltlf import LTLfParser
 from ltlf2dfa.parser.ppltl import PPLTLParser
+
+def _split(string: str, lpar: str, rpar: str, splitchar: str) -> List[str]:
+    #print(f'_split: string=|{string}|, lpar=|{lpar}|, rpar=|{rpar}|, splitchar=|{splitchar}|')
+    start, level, i, n = 0, 0, 0, len(string)
+    substrings = []
+    while i < n:
+        if level == 0 and string[i] == splitchar:
+            substrings.append(string[start:i])
+            #print(f'_split:     substring=|{substrings[-1]}|')
+            start = i + 1
+        elif string[i] == lpar:
+            level = level + 1
+        elif string[i] == rpar:
+            level = level - 1
+        if level < 0:
+            raise ValueError(f"Badly formed string=|{string}|")
+        i = i + 1
+    #print(f'level={level}, start={start}, i={i}, n={n}')
+
+    if level == 0 and start < i + 1:
+        substrings.append(string[start:])
+        #print(f'_split:     substring=|{substrings[-1]}|')
+    elif level != 0:
+        raise ValueError(f"Badly formed string=|{string}|")
+
+    return substrings
 
 class Term(object):
     def __init__(self):
@@ -15,15 +41,15 @@ class Term(object):
 
     @abstractmethod
     def get_atoms(self) -> Set[str]:
-        pass
+        raise RuntimeError("Abstract method 'get_atom' called")
 
     @abstractmethod
     def is_consistent(self, interp: Dict[str, bool]) -> bool:
-        pass
+        raise RuntimeError("Abstract method 'is_consistent' called")
 
     @abstractmethod
     def __str__(self) -> str:
-        pass
+        raise RuntimeError("Abstract method '__str__' called")
 
 class Literal(Term):
     def __init__(self, atom: str, negated: bool = False):
@@ -61,6 +87,78 @@ class Conjunction(Term):
     def __str__(self) -> str:
         return 'true' if len(self.literals) == 0 else ' & '.join([str(literal) for literal in self.literals])
 
+class Denotation(object):
+    def __init__(self):
+        pass
+
+    @abstractmethod
+    def evaluate(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> bool:
+        raise RuntimeError("Abstract method 'evaluate' called")
+
+    @abstractmethod
+    def __str__(self) -> str:
+        raise RuntimeError("Abstract method '__str__' called")
+
+class And(Denotation):
+    def __init__(self, denotations: List[Denotation]):
+        self.denotations = denotations
+
+    def evaluate(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> bool:
+        return all([denotation.evaluate(dlplan_ss_state, denotations_caches) for denotation in self.denotations])
+
+    def __str__(self) -> str:
+        return f"And[{','.join([str(denotation) for denotation in self.denotations])}]"
+
+class Or(Denotation):
+    def __init__(self, denotations: List[Denotation]):
+        self.denotations = denotations
+
+    def evaluate(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> bool:
+        return any([denotation.evaluate(dlplan_ss_state, denotations_caches) for denotation in self.denotations])
+
+    def __str__(self) -> str:
+        return f"Or[{','.join([str(denotation) for denotation in self.denotations])}]"
+
+class Equal(Denotation):
+    def __init__(self, feature: str, reference_value: int, syntactic_element_factory: Any):
+        self.reference_value = reference_value
+        if feature[:2] == 'b_':
+            boolean = syntactic_element_factory.parse_boolean(feature)
+            self.feature = Feature(boolean, boolean.compute_complexity() + 1)
+        elif feature[:2] == 'n_':
+            numerical = syntactic_element_factory.parse_numerical(feature)
+            self.feature = Feature(numerical, numerical.compute_complexity() + 1)
+        else:
+            logging.error(f"Unexpected feature '{feature}' in Equal")
+            self.feature = None
+
+    def evaluate(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> bool:
+        feature_value = int(self.feature.dlplan_feature.evaluate(dlplan_ss_state, denotations_caches))
+        return feature_value == self.reference_value
+
+    def __str__(self) -> str:
+        return f"Equal[{str(self.feature._dlplan_feature)},{self.value}]"
+
+class GreaterThan(Denotation):
+    def __init__(self, feature: str, reference_value: int, syntactic_element_factory: Any):
+        self.reference_value = reference_value
+        if feature[:2] == 'b_':
+            boolean = syntactic_element_factory.parse_boolean(feature)
+            self.feature = Feature(boolean, boolean.compute_complexity() + 1)
+        elif feature[:2] == 'n_':
+            numerical = syntactic_element_factory.parse_numerical(feature)
+            self.feature = Feature(numerical, numerical.compute_complexity() + 1)
+        else:
+            logging.error(f"Unexpected feature '{feature}' in GreaterThan")
+            self.feature = None
+
+    def evaluate(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> bool:
+        feature_value = int(self.feature.dlplan_feature.evaluate(dlplan_ss_state, denotations_caches))
+        return feature_value > self.reference_value
+
+    def __str__(self) -> str:
+        return f"GreaterThan[{str(self.feature._dlplan_feature)},{self.value}]"
+
 class DFA(object):
     def __init__(self, formula_str, formula):
         self.formula_str = formula_str
@@ -71,8 +169,8 @@ class DFA(object):
         self.alphabet = [label.get_atoms() for label in self.labels]
         self.alphabet = set([atom for atoms in self.alphabet for atom in atoms]) - {'true'}
 
-        self.features_map : Dict[str, Tuple[Feature, str, int]] = None
-        self.features : List[Feature] = None
+        self.denotations_map : Dict[str, Denotation] = None
+        self.denotations : List[Denotation] = None
 
         self.num_states = len(self.states)
         self.num_transitions = len(self.transitions)
@@ -177,37 +275,56 @@ class DFA(object):
             if indices[q] is None:
                 index = self._find_component(q, index, indices, lowlinks, in_stack, S)
 
-    def set_features(self, labels: List[str], syntactic_element_factory):
-        self.features_map: Dict[str, Tuple[Feature, int]] = dict()
-        self.features: List[Feature] = []
-        for i, label_str in enumerate(labels):
-            end_of_feature = label_str.rfind(')')
-            feature_str = label_str[:end_of_feature + 1]
-            condition = label_str[end_of_feature + 1]
-            value = int(label_str[end_of_feature + 2:])
-            assert condition in ['>', '=']
-            assert value == 0
+    @staticmethod
+    def _parse_denotation(denotation_str: str, syntactic_element_factory: Any) -> Denotation:
+        try:
+            start = denotation_str.index('(')
+            end = denotation_str.rindex(')')
+        except Exception as e:
+            raise e
 
-            feature = None
-            if feature_str[0] == 'b':
-                boolean = syntactic_element_factory.parse_boolean(feature_str)
-                feature = Feature(boolean, boolean.compute_complexity() + 1)
-            elif feature_str[0] == 'n':
-                numerical = syntactic_element_factory.parse_numerical(feature_str)
-                feature = Feature(numerical, numerical.compute_complexity() + 1)
+        print(f'HOLA: denotation_str=|{denotation_str}|, start={start}, end={end}')
+        if denotation_str[:start] == 'b_and':
+            items = [DFA._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end], '(', ')', ',')]
+            return And(items)
+        elif denotation_str[:start] == 'b_or':
+            items = [DFA._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end], '(', ')', ',')]
+            return Or(items)
+        else:
+            try:
+                end = denotation_str.rindex(')')
+            except Exception as e:
+                raise e
+            feature = denotation_str[:end + 1]
+            condition = denotation_str[end + 1]
+            reference_value = int(denotation_str[end + 2:])
+            if condition == '>':
+                return GreaterThan(feature, reference_value, syntactic_element_factory)
+            elif condition == '=':
+                return Equal(feature, reference_value, syntactic_element_factory)
             else:
-                logging.error(f"Error: Unrecognized feature in label '{label}'")
-                return
+                raise ValueError(f"Unexpected condition '{condition}' in denotation")
 
-            self.features_map[chr(ord('a') + i)] = (feature, condition, value)
-            self.features.append(feature)
+    @staticmethod
+    def parse_denotations(denotation_strs: List[str], syntactic_element_factory: Any) -> List[Denotation]:
+        denotations = []
+        for denotation_str in denotation_strs:
+            if len(denotation_str) > 0 and denotation_str[0] != '#':
+                denotations.append(DFA._parse_denotation(denotation_str, syntactic_element_factory))
+        logging.info(f"{len(denotations)} denotation(s)")
+        return denotations
+
+    def set_denotations(self, denotations: List[Denotation]):
+        self.denotations_map: Dict[str, Denotation] = dict()
+        self.denotations: List[Denotation] = []
+        for i, denotation in enumerate(denotations):
+            self.denotations_map[chr(ord('a') + i)] = denotation
+            self.denotations.append(denotation)
 
     def get_labels_interpretation(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> Dict[str, bool]:
         labels_interpretation: Dict[str, bool] = dict()
-        for (label, (feature, condition, value)) in self.features_map.items():
-            feature_value = int(feature.dlplan_feature.evaluate(dlplan_ss_state, denotations_caches))
-            labels_interpretation[label] = feature_value > value if condition == '>' else feature_value == value
-            #print(f'Feature: feature={str(feature._dlplan_feature)}/{feature.complexity}, dlplan_ss_state={dlplan_ss_state}, value={labels_interpretation[label]}')
+        for label, denotation in self.denotations_map.items():
+            labels_interpretation[label] = denotation.evaluate(dlplan_ss_state, denotations_caches)
         #print(f'DFA: interpretations: dlplan_ss_state={dlplan_ss_state}, labels_interpretation={labels_interpretation}')
         return labels_interpretation
 
