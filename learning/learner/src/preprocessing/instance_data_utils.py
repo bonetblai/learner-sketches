@@ -120,7 +120,7 @@ def compute_instance_datas(domain_filepath: Path,
         abstractions_options.sort_ascending_by_num_states = True
         abstractions = mm.GlobalFaithfulAbstraction.create(str(domain_filepath), [str(p) for p in instance_filepaths], abstractions_options)
         if len(abstractions) == 0:
-            return None * 3
+            return [None] * 4
 
         logging.info("Constructing StateSpaces...")
         memories = []

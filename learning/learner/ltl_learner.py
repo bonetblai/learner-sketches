@@ -76,7 +76,7 @@ def ltl_learn_sketch_for_problem_class(
         logging.info(colored("Constructing InstanceDatas...", "blue"))
         domain_data, instance_datas, num_ss_states, num_gfa_states = compute_instance_datas(domain_filepath, instance_filepaths, disable_closed_Q, max_num_states_per_instance, max_time_per_instance, enable_dump_files)
         if instance_datas is None:
-            raise Exception("Failed to create InstanceDatas.")
+            raise RuntimeError("Failed to create InstanceDatas.")
 
         state_finder = StateFinder(domain_data, instance_datas)
 
