@@ -11,7 +11,7 @@ from .src.exit_codes import ExitCode
 from .src.iteration import EncodingType, ASPFactory, ClingoExitCode, IterationData, LearningStatistics, LTLSketch, LTLD2sepDlplanPolicyFactory, compute_feature_pool, compute_per_state_feature_valuations, compute_state_pair_equivalences, compute_tuple_graph_equivalences, minimize_tuple_graph_equivalences
 from .src.util import Timer, create_experiment_workspace, change_working_directory, write_file, change_dir, memory_usage, add_console_handler, print_separation_line
 from .src.preprocessing import InstanceData, PreprocessingData, StateFinder, compute_instance_datas, compute_tuple_graphs
-from .src.iteration import make_dfa
+from .src.iteration import make_dfa, DFA
 
 
 def _compute_smallest_unsolved_instance(
@@ -51,7 +51,7 @@ def ltl_learn_sketch_for_problem_class(
     additional_numericals: List[str] = None,
     enable_dump_files: bool = False,
     ppltl_goal_str: str = "",
-    ltl_labels: List[str] = None,
+    ltl_labels: Path = None,
 ):
     assert encoding_type == EncodingType.D2_LTL
 
@@ -95,11 +95,16 @@ def ltl_learn_sketch_for_problem_class(
     logging.info(f'dfa: labels: {[str(label) for label in ppltl_dfa.labels]}')
     logging.info(f'dfa: alphabet: {ppltl_dfa.alphabet}')
     if ltl_labels is not None:
-        if len(ltl_labels) == len(ppltl_dfa.alphabet):
-            syntactic_element_factory = preprocessing_data.domain_data.syntactic_element_factory
-            ppltl_dfa.set_features(ltl_labels, syntactic_element_factory)
+        logging.info(f"Reading label denotations from {ltl_labels}")
+        with ltl_labels.open("r") as fd:
+            denotations = [denotation.strip() for denotation in fd.readlines()]
+        syntactic_element_factory = preprocessing_data.domain_data.syntactic_element_factory
+        denotations = DFA.parse_denotations(denotations, syntactic_element_factory)
+
+        if len(denotations) == len(ppltl_dfa.alphabet):
+            ppltl_dfa.set_denotations(denotations)
         else:
-            logging.error(f"Error: insufficient LTL labels; expecting {len(ppltl_dfa.alphabet)} label(s)")
+            logging.error(f"Error: insufficient LTL labels; expecting {len(ppltl_dfa.alphabet)} denotation(s) but got {len(denotations)}")
             return
     else:
         logging.error(f"Error: LTL labels must be supplied when using --ppltl-goal; use --ltl-labels")
