@@ -1,7 +1,7 @@
 import os
 
 from collections import defaultdict
-from typing import List, Union, Dict
+from typing import Set, List, Union, Dict, Any
 from pathlib import Path
 
 import pymimir as mm
@@ -313,8 +313,8 @@ class ASPFactory:
     def _make_dfa_consistent_facts(self,
                                    dfa: DFA,
                                    preprocessing_data: PreprocessingData,
-                                   iteration_data: IterationData):
-        facts = []
+                                   iteration_data: IterationData) -> List[Any]:
+        facts: List[Any] = []
         for instance_data in iteration_data.instance_datas:
             for gfa_state in instance_data.gfa.get_states():
                 dlplan_source_ss_state = preprocessing_data.state_finder.get_dlplan_ss_state(gfa_state)
@@ -327,26 +327,24 @@ class ASPFactory:
 
     def _make_dfa_facts(self,
                         dfa: DFA,
-                        scc_index: int,
+                        scc_states: Set[int],
+                        scc_initial_states: Set[int],
+                        scc_final_states: Set[int],
                         preprocessing_data: PreprocessingData,
-                        iteration_data: IterationData):
-        # Obtain initial//exit points for given SCC
-        scc_states = dfa.sccs.get(scc_index, None)
-        scc_initial_states = dfa.scc_initial_states[scc_index]
-        scc_exit_points = dfa.scc_exit_points[scc_index]
-        assert len(scc_initial_states) > 0 and len(scc_exit_points) > 0
+                        iteration_data: IterationData) -> List[Any]:
+        assert len(scc_initial_states) > 0 and len(scc_final_states) > 0
         assert scc_initial_states.issubset(scc_states)
 
         # Generate DFA facts for given SCC
-        facts = []
+        facts: List[Any] = []
 
-        for q in scc_states | set(scc_exit_points):
+        for q in scc_states | scc_final_states:
             facts.append(self._create_dfa_state_fact(q))
 
         for q in scc_initial_states:
             facts.append(self._create_dfa_initial_fact(q))
 
-        for q in scc_exit_points:
+        for q in scc_final_states:
             facts.append(self._create_dfa_accepting_fact(q))
 
         for q in scc_states:
@@ -362,8 +360,10 @@ class ASPFactory:
                    preprocessing_data: PreprocessingData,
                    iteration_data: IterationData,
                    dfa: DFA = None,
-                   scc_index: int = None):
-        facts = []
+                   scc_states: Set[int] = None,
+                   scc_initial_states: Set[int] = None,
+                   scc_final_states: Set[int] = None) -> List[Any]:
+        facts: List[Any] = []
         facts.extend(self._make_state_space_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_domain_feature_data_facts(preprocessing_data, iteration_data))
         facts.extend(self._make_instance_feature_data_facts(preprocessing_data, iteration_data))
@@ -372,8 +372,8 @@ class ASPFactory:
         facts.extend(self._make_tuple_graph_facts(preprocessing_data, iteration_data))
 
         if dfa is not None:
-            assert scc_index is not None
-            facts.extend(self._make_dfa_facts(dfa, scc_index, preprocessing_data, iteration_data))
+            assert scc_states is not None and scc_initial_states is not None and scc_final_states is not None, (scc_states, scc_initial_states, scc_final_states)
+            facts.extend(self._make_dfa_facts(dfa, scc_states, scc_initial_states, scc_final_states, preprocessing_data, iteration_data))
 
         return facts
 

@@ -2,7 +2,7 @@ import logging
 
 from pathlib import Path
 from termcolor import colored
-from typing import List, MutableSet, Dict
+from typing import Set, List, MutableSet, Dict
 
 import pymimir as mm
 from dlplan.policy import PolicyMinimizer
@@ -15,14 +15,15 @@ from .src.iteration import make_dfa
 
 
 def _compute_smallest_unsolved_instance(
-        scc_index: int,
+        scc_initial_states: Set[int],
+        scc_final_states: Set[int],
         preprocessing_data: PreprocessingData,
         iteration_data: IterationData,
         selected_instance_datas: List[InstanceData],
         sketch: LTLSketch,
         enable_goal_separating_features: bool):
     for instance_data in selected_instance_datas:
-        if not sketch.solves(scc_index, preprocessing_data, iteration_data, instance_data, enable_goal_separating_features):
+        if not sketch.solves(scc_initial_states, scc_final_states, preprocessing_data, iteration_data, instance_data, enable_goal_separating_features):
             return instance_data
     return None
 
@@ -109,7 +110,9 @@ def ltl_learn_sketch_for_problem_class(
     # Learn sketch in stages using SCCs of LTL automata
     sketch = LTLSketch(None, width, ppltl_dfa)
     for scc_index, scc in ppltl_dfa.sccs.items():
-        logging.info(f"Working SCC: index={scc_index}, scc={scc}, initial={ppltl_dfa.scc_initial_states[scc_index]}, final={ppltl_dfa.scc_exit_points[scc_index]}")
+        scc_initial_states = ppltl_dfa.scc_initial_states[scc_index]
+        scc_final_states = ppltl_dfa.scc_exit_points[scc_index]
+        logging.info(f"Working SCC: index={scc_index}, scc={scc}, initial={scc_initial_states}, final={scc_final_states}")
         if scc.issubset(ppltl_dfa.accepting): continue
 
         iteration_data = IterationData()
@@ -173,7 +176,7 @@ def ltl_learn_sketch_for_problem_class(
                     j = 0
                     while True:
                         asp_factory = ASPFactory(encoding_type, enable_goal_separating_features, max_num_rules)
-                        facts = asp_factory.make_facts(preprocessing_data, iteration_data, ppltl_dfa, scc_index)
+                        facts = asp_factory.make_facts(preprocessing_data, iteration_data, ppltl_dfa, scc, scc_initial_states, scc_final_states)
                         if j == 0:
                             #d2_facts.update(asp_factory.make_initial_d2_facts(preprocessing_data, iteration_data))
                             d2_facts.update(asp_factory.make_initial_d2_facts_alt(preprocessing_data, iteration_data))
@@ -209,7 +212,7 @@ def ltl_learn_sketch_for_problem_class(
                         sketch.replace(dlplan_policy)
                         logging.info("Learned the following sketch:")
                         sketch.print()
-                        if _compute_smallest_unsolved_instance(scc_index, preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
+                        if _compute_smallest_unsolved_instance(scc_initial_states, scc_final_states, preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None:
                             # Stop adding D2-separation constraints
                             # if sketch solves all training instances
                             break
@@ -219,8 +222,8 @@ def ltl_learn_sketch_for_problem_class(
 
                     verification_timer.resume()
                     logging.info(colored("Verifying learned sketch...", "blue"))
-                    assert _compute_smallest_unsolved_instance(scc_index, preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None
-                    smallest_unsolved_instance = _compute_smallest_unsolved_instance(scc_index, preprocessing_data, iteration_data, instance_datas, sketch, enable_goal_separating_features)
+                    assert _compute_smallest_unsolved_instance(scc_initial_states, scc_final_states, preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None
+                    smallest_unsolved_instance = _compute_smallest_unsolved_instance(scc_initial_states, scc_final_states, preprocessing_data, iteration_data, instance_datas, sketch, enable_goal_separating_features)
                     verification_timer.stop()
 
                     if smallest_unsolved_instance is None:
@@ -234,9 +237,11 @@ def ltl_learn_sketch_for_problem_class(
                         logging.info(f"Smallest unsolved instance: {smallest_unsolved_instance.mimir_ss.get_problem().get_filepath()} (idx={smallest_unsolved_instance.idx})")
                         logging.info(f"Selected instances {selected_instance_idxs}")
                     i += 1
-        #break
 
     total_timer.stop()
+
+    # Check that assembled policy solves whole problem
+    #assert _compute_smallest_unsolved_instance(scc_initial_states, scc_final_states, preprocessing_data, iteration_data, iteration_data.instance_datas, sketch, enable_goal_separating_features) is None
 
     # Output the result
     with change_dir("output"):

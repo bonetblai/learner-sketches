@@ -55,13 +55,15 @@ class LTLD2sepDlplanPolicyFactory(DlplanPolicyFactory):
                     dlplan_feature = iteration_data.feature_pool[f_idx].dlplan_feature
                     if dlplan_feature in dlplan_features:
                         effects.add(effect)
-                assert q1 in dfa_tr
-                for label in dfa_tr[q1]:
-                    assert label in dfa_tr[q1]
-                    q2 = dfa_tr[q1][label]
-                    dlplan_rule = policy_builder.make_rule(conditions, effects)
-                    ext_rule = LTLRule(dlplan_rule, q1, label, q2)
-                    rules.add(ext_rule)
+                if q1 in dfa_tr:
+                   for label in dfa_tr[q1]:
+                       assert label in dfa_tr[q1]
+                       q2 = dfa_tr[q1][label]
+                       dlplan_rule = policy_builder.make_rule(conditions, effects)
+                       ext_rule = LTLRule(dlplan_rule, q1, label, q2)
+                       rules.add(ext_rule)
+                else:
+                    raise False
             elif symbol.name == "good_new3":
                 #_print_symbol(symbol)
                 pass

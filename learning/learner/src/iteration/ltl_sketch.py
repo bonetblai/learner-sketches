@@ -218,7 +218,8 @@ class LTLSketch:
         return True
 
     def solves(self,
-               scc_index: int,
+               dfa_initial_states: Set[int],
+               dfa_final_states: Set[int],
                preprocessing_data: PreprocessingData,
                iteration_data: IterationData,
                instance_data: InstanceData,
@@ -230,10 +231,6 @@ class LTLSketch:
             (3) sketch is acyclic, and
             (4) sketch features separate goals from nongoal states. """
         logging.info(colored(f"Verifying sketch solvability on {instance_data.mimir_ss.get_problem().get_filepath()}", "red"))
-
-        # Calculate initial/final states for the automaton given SCC index
-        dfa_initial_states = self.dfa.scc_initial_states[scc_index]
-        dfa_final_states = self.dfa.scc_exit_points[scc_index]
 
         bounded, subgoal_states_per_r_reachable_state = self._verify_bounded_width(dfa_initial_states, dfa_final_states, preprocessing_data, iteration_data, instance_data)
         if not bounded:
