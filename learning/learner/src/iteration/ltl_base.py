@@ -9,14 +9,12 @@ from .feature_pool import Feature
 from ltlf2dfa.parser.ltlf import LTLfParser
 from ltlf2dfa.parser.ppltl import PPLTLParser
 
-def _split(string: str, lpar: str, rpar: str, splitchar: str) -> List[str]:
-    #print(f'_split: string=|{string}|, lpar=|{lpar}|, rpar=|{rpar}|, splitchar=|{splitchar}|')
+def _split(string: str, lpar: str = '(', rpar: str = ')', splitchar: str = ',') -> List[str]:
     start, level, i, n = 0, 0, 0, len(string)
     substrings = []
     while i < n:
         if level == 0 and string[i] == splitchar:
             substrings.append(string[start:i])
-            #print(f'_split:     substring=|{substrings[-1]}|')
             start = i + 1
         elif string[i] == lpar:
             level = level + 1
@@ -25,17 +23,16 @@ def _split(string: str, lpar: str, rpar: str, splitchar: str) -> List[str]:
         if level < 0:
             raise ValueError(f"Badly formed string=|{string}|")
         i = i + 1
-    #print(f'level={level}, start={start}, i={i}, n={n}')
 
     if level == 0 and start < i + 1:
         substrings.append(string[start:])
-        #print(f'_split:     substring=|{substrings[-1]}|')
     elif level != 0:
         raise ValueError(f"Badly formed string=|{string}|")
 
     return substrings
 
-class Term(object):
+
+class Label(object):
     def __init__(self):
         pass
 
@@ -51,7 +48,7 @@ class Term(object):
     def __str__(self) -> str:
         raise RuntimeError("Abstract method '__str__' called")
 
-class Literal(Term):
+class Literal(Label):
     def __init__(self, atom: str, negated: bool = False):
         super().__init__()
         self.atom : str = atom
@@ -62,13 +59,12 @@ class Literal(Term):
 
     def is_consistent(self, interp: Dict[str, bool]) -> bool:
         value = interp[self.atom] != self.negated
-        #print(f'is_consistent: interp={interp}, literal={str(self)}, value={value}')
         return interp[self.atom] != self.negated
 
     def __str__(self) -> str:
         return self.atom if not self.negated else f'~{self.atom}'
 
-class Conjunction(Term):
+class Conjunction(Label):
     def __init__(self, literals: List[Literal] = []):
         super().__init__()
         self.literals : List[Literal] = literals
@@ -86,6 +82,7 @@ class Conjunction(Term):
 
     def __str__(self) -> str:
         return 'true' if len(self.literals) == 0 else ' & '.join([str(literal) for literal in self.literals])
+
 
 class Denotation(object):
     def __init__(self):
@@ -169,13 +166,14 @@ class GreaterThan(Denotation):
     def __str__(self) -> str:
         return f"GreaterThan[{str(self.feature._dlplan_feature)},{self.value}]"
 
+
 class DFA(object):
     def __init__(self, formula_str, formula):
         self.formula_str = formula_str
         self.formula = formula
         self.dfa_dot = self.formula.to_dfa()
         self.states, self.transitions, self.initial, self.accepting = self._parse_dfa(self.dfa_dot)
-        self.labels : List[Term] = [label for (src, dst, label) in self.transitions]
+        self.labels : List[Label] = [label for (src, dst, label) in self.transitions]
         self.alphabet = [label.get_atoms() for label in self.labels]
         self.alphabet = set([atom for atoms in self.alphabet for atom in atoms]) - {'true'}
 
@@ -185,7 +183,7 @@ class DFA(object):
         self.num_states = len(self.states)
         self.num_transitions = len(self.transitions)
 
-        self.tr_function: Dict[int, Dict[Term, int]] = dict()
+        self.tr_function: Dict[int, Dict[Label, int]] = dict()
         for (src, dst, label) in self.transitions:
             if src not in self.tr_function:
                 self.tr_function[src] = dict()
@@ -224,11 +222,11 @@ class DFA(object):
         accepting = set([int(state.rstrip(';')) for state in accepting_pattern.search(dfa_dot).groups()])
         return states, transitions, initial, accepting
 
-    def _parse_label(self, label: str) -> Term:
+    def _parse_label(self, label: str) -> Label:
         literals = [literal.strip() for literal in label.split('&')]
         return self._parse_literals(literals)
 
-    def _parse_literals(self, literals: List[str]) -> Term:
+    def _parse_literals(self, literals: List[str]) -> Label:
         if len(literals) == 1 and literals[0] == 'true':
             return Conjunction()
         elif len(literals) == 1:
@@ -285,23 +283,22 @@ class DFA(object):
             if indices[q] is None:
                 index = self._find_component(q, index, indices, lowlinks, in_stack, S)
 
-    @staticmethod
-    def _parse_denotation(denotation_str: str, syntactic_element_factory: Any) -> Denotation:
+    @classmethod
+    def _parse_denotation(cls, denotation_str: str, syntactic_element_factory: Any) -> Denotation:
         try:
             start = denotation_str.index('(')
             end = denotation_str.rindex(')')
         except Exception as e:
             raise e
 
-        print(f'HOLA: denotation_str=|{denotation_str}|, start={start}, end={end}')
         if denotation_str[:start] == 'b_not':
-            denotation = DFA._parse_denotation(denotation_str[1+start:end].strip(), syntactic_element_factory)
+            denotation = cls._parse_denotation(denotation_str[1+start:end].strip(), syntactic_element_factory)
             return Not(denotation)
         elif denotation_str[:start] == 'b_and':
-            items = [DFA._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end], '(', ')', ',')]
+            items = [cls._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end])]
             return And(items)
         elif denotation_str[:start] == 'b_or':
-            items = [DFA._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end], '(', ')', ',')]
+            items = [cls._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end])]
             return Or(items)
         else:
             try:
@@ -318,12 +315,12 @@ class DFA(object):
             else:
                 raise ValueError(f"Unexpected condition '{condition}' in denotation")
 
-    @staticmethod
-    def parse_denotations(denotation_strs: List[str], syntactic_element_factory: Any) -> List[Denotation]:
+    @classmethod
+    def parse_denotations(cls, denotation_strs: List[str], syntactic_element_factory: Any) -> List[Denotation]:
         denotations = []
         for denotation_str in denotation_strs:
             if len(denotation_str) > 0 and denotation_str[0] != '#':
-                denotations.append(DFA._parse_denotation(denotation_str, syntactic_element_factory))
+                denotations.append(cls._parse_denotation(denotation_str, syntactic_element_factory))
         logging.info(f"{len(denotations)} denotation(s)")
         return denotations
 
@@ -338,7 +335,6 @@ class DFA(object):
         labels_interpretation: Dict[str, bool] = dict()
         for label, denotation in self.denotations_map.items():
             labels_interpretation[label] = denotation.evaluate(dlplan_ss_state, denotations_caches)
-        #print(f'DFA: interpretations: dlplan_ss_state={dlplan_ss_state}, labels_interpretation={labels_interpretation}')
         return labels_interpretation
 
     def get_initial_states(self, scc_initial_states: Set[int], dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> List[int]:
@@ -348,13 +344,12 @@ class DFA(object):
         for q in scc_initial_states:
             for label, qp in self.tr_function[q].items():
                 if label.is_consistent(labels_interpretation):
-                    #print(f'Initial: state={dlplan_ss_state}, interp={labels_interpretation}, label={label}, q={q}, qp={qp}")
                     initial_states.append(qp)
 
         assert len(initial_states) > 0
         return initial_states
 
-    def next_state(self, q: int, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> Tuple[Term, int]:
+    def next_state(self, q: int, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> Tuple[Label, int]:
         labels_interpretation = self.get_labels_interpretation(dlplan_ss_state, denotations_caches)
         if q in self.tr_function:
             for label, qp in self.tr_function[q].items():
@@ -372,4 +367,3 @@ def make_dfa(formula_str: str, ppltl: bool = True):
     parser = PPLTLParser() if ppltl else LTLfParser()
     formula = parser(formula_str)
     return DFA(formula_str, formula)
- 
