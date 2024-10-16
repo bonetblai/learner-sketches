@@ -99,6 +99,16 @@ class Denotation(object):
     def __str__(self) -> str:
         raise RuntimeError("Abstract method '__str__' called")
 
+class Not(Denotation):
+    def __init__(self, denotation: Denotation):
+        self.denotation = denotation
+
+    def evaluate(self, dlplan_ss_state: dlplan_core.State, denotations_caches: dlplan_core.DenotationsCaches) -> bool:
+        return not self.denotation.evaluate(dlplan_ss_state, denotations_caches)
+
+    def __str__(self) -> str:
+        return f"Not[{str(denotation)}]"
+
 class And(Denotation):
     def __init__(self, denotations: List[Denotation]):
         self.denotations = denotations
@@ -284,7 +294,10 @@ class DFA(object):
             raise e
 
         print(f'HOLA: denotation_str=|{denotation_str}|, start={start}, end={end}')
-        if denotation_str[:start] == 'b_and':
+        if denotation_str[:start] == 'b_not':
+            denotation = DFA._parse_denotation(denotation_str[1+start:end].strip(), syntactic_element_factory)
+            return Not(denotation)
+        elif denotation_str[:start] == 'b_and':
             items = [DFA._parse_denotation(item.strip(), syntactic_element_factory) for item in _split(denotation_str[1+start:end], '(', ')', ',')]
             return And(items)
         elif denotation_str[:start] == 'b_or':
